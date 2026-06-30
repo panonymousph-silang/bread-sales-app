@@ -160,7 +160,6 @@ function PinScreen({ onLogin, pendingCount }) {
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
               {r.role === "admin" && pendingCount > 0 && <span style={{ background: P.red, color: "#fff", borderRadius: "50%", width: 20, height: 20, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700 }}>{pendingCount}</span>}
-              <span style={S.pill(P.accent)}>{PINS[r.role]}</span>
             </div>
           </div>
         ))}
