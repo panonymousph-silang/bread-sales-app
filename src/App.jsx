@@ -1,52 +1,85 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { createClient } from "@supabase/supabase-js";
+
+const SUPABASE_URL = "https://tmgzdlwldsnibpuxhiht.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRtZ3pkbHdsZHNuaWJwdXhoaWh0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYxNjU1NDIsImV4cCI6MjEwMTc0MTU0Mn0.pHo-t8k5mEYkzGhaUHh7bV28PIxetJJ3JmOVNlQIels";
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const PINS = { staff: "1111", toyota: "2222", aws: "3333", admin: "4444" };
 const STORES = { toyota: "Toyota Sta Rosa", aws: "AWS" };
-const DEFAULT_PRODUCTS = [
-  { name: "Reg pandesal", price: 55 },
-  { name: "Wheat pandesal", price: 65 },
-  { name: "Malunggai pandesal", price: 65 },
-  { name: "Shokupan", price: 140 },
-  { name: "Brioche", price: 160 },
-  { name: "Muesli (S)", price: 95 },
-  { name: "Sourdough loaf", price: 175 },
-  { name: "Milk Bread", price: 95 },
-  { name: "Ciabatta", price: 80 },
-  { name: "Curry bread", price: 60 },
-  { name: "Ham & Cheese", price: 60 },
-  { name: "Tuna onion", price: 50 },
-  { name: "Garlic tomato roll", price: 55 },
-  { name: "Melonpan Choco chips", price: 50 },
-  { name: "Red bean", price: 50 },
-  { name: "Napoli Cheese", price: 55 },
-  { name: "Honey Toast", price: 45 },
-  { name: "Coffee", price: 65 },
-  { name: "Matcha", price: 65 },
-  { name: "J. Cheesecake", price: 220 },
-  { name: "Banana bread", price: 135 },
-];
 
-let _db = { products: DEFAULT_PRODUCTS, dailyLists: [], salesRecords: [] };
-const db = {
-  getProducts: () => _db.products,
-  setProducts: (p) => { _db.products = p; },
-  addList: (l) => { _db.dailyLists.push(l); },
-  getLists: () => _db.dailyLists,
-  addRecord: (r) => { _db.salesRecords.push(r); },
-  updateRecord: (id, patch) => { _db.salesRecords = _db.salesRecords.map(r => r.id === id ? { ...r, ...patch } : r); },
-  deleteRecord: (id) => { _db.salesRecords = _db.salesRecords.filter(r => r.id !== id); },
-  getRecords: () => _db.salesRecords,
-  getRecordsByStore: (store) => _db.salesRecords.filter(r => r.store === store),
-  getRecordsByMonth: (y, m) => _db.salesRecords.filter(r => { const d = new Date(r.date); return d.getFullYear() === y && d.getMonth() + 1 === m; }),
-  getPendingCount: () => _db.salesRecords.filter(r => r.status === "submitted").length,
+// ── Supabase helpers ──────────────────────────────────────────────────────────
+const api = {
+  getProducts: async () => {
+    const { data } = await supabase.from("products").select("*").order("name");
+    return data || [];
+  },
+  updateProductPrice: async (id, price) => {
+    await supabase.from("products").update({ price }).eq("id", id);
+  },
+  addProduct: async (name, price) => {
+    const { data } = await supabase.from("products").insert({ name, price }).select().single();
+    return data;
+  },
+  deleteProduct: async (id) => {
+    await supabase.from("products").delete().eq("id", id);
+  },
+  addList: async (date, store, items) => {
+    const { data } = await supabase.from("daily_lists").insert({ date, store, items }).select().single();
+    return data;
+  },
+  getLists: async (store) => {
+    const { data } = await supabase.from("daily_lists").select("*").eq("store", store).order("created_at", { ascending: false });
+    return data || [];
+  },
+  addRecord: async (r) => {
+    const { data } = await supabase.from("sales_records").insert({
+      list_id: r.listId, store: r.store, date: r.date,
+      items: r.items, online_payments: r.onlinePayments,
+      starting_cash: r.startingCash, expenses: r.expenses, status: "draft",
+    }).select().single();
+    return data;
+  },
+  updateRecord: async (id, patch) => {
+    const mapped = {};
+    if (patch.status !== undefined) mapped.status = patch.status;
+    if (patch.submittedAt !== undefined) mapped.submitted_at = patch.submittedAt;
+    if (patch.confirmedAt !== undefined) mapped.confirmed_at = patch.confirmedAt;
+    await supabase.from("sales_records").update(mapped).eq("id", id);
+  },
+  deleteRecord: async (id) => {
+    await supabase.from("sales_records").delete().eq("id", id);
+  },
+  getRecordsByStore: async (store) => {
+    const { data } = await supabase.from("sales_records").select("*").eq("store", store).order("date", { ascending: false });
+    return (data || []).map(mapRecord);
+  },
+  getRecordsByMonth: async (year, month) => {
+    const start = `${year}-${String(month).padStart(2, "0")}-01`;
+    const end = `${year}-${String(month).padStart(2, "0")}-31`;
+    const { data } = await supabase.from("sales_records").select("*").gte("date", start).lte("date", end).order("date");
+    return (data || []).map(mapRecord);
+  },
+  getSubmitted: async () => {
+    const { data } = await supabase.from("sales_records").select("*").eq("status", "submitted").order("submitted_at");
+    return (data || []).map(mapRecord);
+  },
+  getPendingCount: async () => {
+    const { count } = await supabase.from("sales_records").select("*", { count: "exact", head: true }).eq("status", "submitted");
+    return count || 0;
+  },
 };
 
-const uid = () => Math.random().toString(36).slice(2, 9);
+const mapRecord = (r) => ({
+  ...r, listId: r.list_id, onlinePayments: r.online_payments || [],
+  startingCash: r.starting_cash, submittedAt: r.submitted_at, confirmedAt: r.confirmed_at,
+});
+
+// ── Calc helpers ──────────────────────────────────────────────────────────────
 const todayStr = () => new Date().toISOString().split("T")[0];
 const fmtDate = (d) => new Date(d + "T00:00:00").toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" });
-const fmtTime = (iso) => new Date(iso).toLocaleString("en-PH", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+const fmtTime = (iso) => iso ? new Date(iso).toLocaleString("en-PH", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "";
 const currency = (n) => `₱${Number(n || 0).toLocaleString("en-PH", { minimumFractionDigits: 0 })}`;
-
 const calcLO = (item) => Math.max(0, (item.qty || 0) - (item.soldFull || 0) - (item.sold5 || 0));
 const calcWaste = (item) => Math.max(0, (item.stock50 || 0) - (item.sold50 || 0));
 const calcItemTotal = (item, isToyota) =>
@@ -61,6 +94,7 @@ const calcTotals = (record) => {
   return { totalSales, onlineTotal, endingCash };
 };
 
+// ── Styles ────────────────────────────────────────────────────────────────────
 const P = {
   bg: "#0f0e11", surface: "#1a1820", card: "#221f2a", border: "#2e2a38",
   accent: "#f5a623", text: "#f0eaf8", muted: "#7a7189",
@@ -88,6 +122,11 @@ const S = {
     borderRadius: 8, padding: "9px 16px", fontWeight: 600, fontSize: 14, cursor: "pointer",
   }),
 };
+
+// ── Loading spinner ───────────────────────────────────────────────────────────
+function Spinner() {
+  return <div style={{ textAlign: "center", padding: 40, color: P.muted, fontSize: 14 }}>Loading...</div>;
+}
 
 function Stepper({ value, onChange, min = 0, max, color = P.accent }) {
   return (
@@ -158,9 +197,9 @@ function PinScreen({ onLogin, pendingCount }) {
               <div style={{ fontSize: 13, fontWeight: 600 }}>{r.label}</div>
               <div style={{ fontSize: 11, color: P.muted }}>{r.hint}</div>
             </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              {r.role === "admin" && pendingCount > 0 && <span style={{ background: P.red, color: "#fff", borderRadius: "50%", width: 20, height: 20, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700 }}>{pendingCount}</span>}
-            </div>
+            {r.role === "admin" && pendingCount > 0 && (
+              <span style={{ background: P.red, color: "#fff", borderRadius: "50%", width: 20, height: 20, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700 }}>{pendingCount}</span>
+            )}
           </div>
         ))}
       </div>
@@ -171,79 +210,79 @@ function PinScreen({ onLogin, pendingCount }) {
 // ── Staff View ────────────────────────────────────────────────────────────────
 function StaffView() {
   const [tab, setTab] = useState("create");
-  const [tick, setTick] = useState(0);
-  const prods = db.getProducts();
-
+  const [products, setProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [date, setDate] = useState(todayStr());
   const [target, setTarget] = useState("toyota");
-  const [items, setItems] = useState(prods.map(p => ({ ...p, qty: 0, selected: false })));
+  const [items, setItems] = useState([]);
   const [sent, setSent] = useState(false);
-
-  // Product management state
-  const [products, setProducts] = useState([...prods]);
-  const [editIdx, setEditIdx] = useState(null);
+  const [sending, setSending] = useState(false);
+  const [editId, setEditId] = useState(null);
   const [editPrice, setEditPrice] = useState("");
   const [newName, setNewName] = useState("");
   const [newPrice, setNewPrice] = useState("");
-  const [confirmDeleteIdx, setConfirmDeleteIdx] = useState(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState(null);
 
-  const refreshItemsFromProducts = () => {
-    const latest = db.getProducts();
-    setItems(latest.map(p => ({ ...p, qty: 0, selected: false })));
-  };
+  const loadProducts = useCallback(async () => {
+    setLoading(true);
+    const prods = await api.getProducts();
+    setProducts(prods);
+    setItems(prods.map(p => ({ ...p, qty: 0, selected: false })));
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { loadProducts(); }, [loadProducts]);
 
   const toggle = (i) => setItems(prev => prev.map((x, j) => j === i ? { ...x, selected: !x.selected } : x));
   const setQty = (i, v) => setItems(prev => prev.map((x, j) => j === i ? { ...x, qty: Math.max(0, v) } : x));
-  const handleSend = () => {
+
+  const handleSend = async () => {
     const sel = items.filter(x => x.selected && x.qty > 0);
     if (!sel.length) return;
-    db.addList({ id: uid(), date, store: target, items: sel.map(({ name, price, qty }) => ({ name, price, qty })), createdAt: new Date().toISOString() });
+    setSending(true);
+    await api.addList(date, target, sel.map(({ name, price, qty }) => ({ name, price, qty })));
+    setSending(false);
     setSent(true);
   };
 
-  const savePrice = (i) => {
-    const u = products.map((p, j) => j === i ? { ...p, price: Number(editPrice) } : p);
-    setProducts(u); db.setProducts(u); setEditIdx(null);
-    refreshItemsFromProducts();
+  const savePrice = async (id) => {
+    await api.updateProductPrice(id, Number(editPrice));
+    setEditId(null);
+    loadProducts();
   };
-  const addProduct = () => {
+
+  const handleAddProduct = async () => {
     if (!newName || !newPrice) return;
-    const u = [...products, { name: newName, price: Number(newPrice) }];
-    setProducts(u); db.setProducts(u);
+    await api.addProduct(newName, Number(newPrice));
     setNewName(""); setNewPrice("");
-    refreshItemsFromProducts();
+    loadProducts();
   };
-  const deleteProduct = (i) => {
-    const u = products.filter((_, j) => j !== i);
-    setProducts(u); db.setProducts(u);
-    setConfirmDeleteIdx(null);
-    refreshItemsFromProducts();
+
+  const handleDeleteProduct = async (id) => {
+    await api.deleteProduct(id);
+    setConfirmDeleteId(null);
+    loadProducts();
   };
 
   if (sent) return (
     <div style={{ ...S.sec, textAlign: "center", paddingTop: 60 }}>
       <div style={{ fontSize: 48, marginBottom: 12 }}>✅</div>
       <div style={{ fontSize: 20, fontWeight: 700, color: P.green }}>List Sent to {STORES[target]}!</div>
-      <button style={{ ...S.btn(), marginTop: 24 }} onClick={() => { setSent(false); refreshItemsFromProducts(); }}>Create Another</button>
+      <button style={{ ...S.btn(), marginTop: 24 }} onClick={() => { setSent(false); loadProducts(); }}>Create Another</button>
     </div>
   );
-
-  const tabs = [
-    { id: "create", label: "📋 Create List" },
-    { id: "manage", label: "🏷️ Manage Products" },
-  ];
 
   return (
     <div style={S.sec}>
       <h2 style={{ margin: "0 0 14px", fontSize: 18, fontWeight: 700 }}>Main Store</h2>
-      <div style={{ display: "flex", gap: 8, marginBottom: 18, flexWrap: "wrap" }}>
-        {tabs.map(t => (
-          <button key={t.id} onClick={() => setTab(t.id)} style={{ ...S.btn(tab === t.id ? "primary" : "ghost"), padding: "8px 14px", fontSize: 13 }}>{t.label}</button>
+      <div style={{ display: "flex", gap: 8, marginBottom: 18 }}>
+        {[["create","📋 Create List"],["manage","🏷️ Manage Products"]].map(([id,label]) => (
+          <button key={id} onClick={() => setTab(id)} style={{ ...S.btn(tab === id ? "primary" : "ghost"), padding: "8px 14px", fontSize: 13 }}>{label}</button>
         ))}
       </div>
 
       {tab === "create" && (
-        <>
+        loading ? <Spinner /> : <>
           <div style={{ ...S.row, marginBottom: 14 }}>
             <div style={S.col}><label style={S.lbl}>Date</label><input type="date" value={date} onChange={e => setDate(e.target.value)} style={S.inp} /></div>
             <div style={S.col}><label style={S.lbl}>Send to</label>
@@ -263,7 +302,7 @@ function StaffView() {
               </tr></thead>
               <tbody>
                 {items.map((item, i) => (
-                  <tr key={i} style={{ background: item.selected ? "#2a2060" : "transparent" }}>
+                  <tr key={item.id} style={{ background: item.selected ? "#2a2060" : "transparent" }}>
                     <td style={{ ...S.td, textAlign: "left" }}>{item.name}</td>
                     <td style={S.td}>{currency(item.price)}</td>
                     <td style={S.td}><input type="checkbox" checked={item.selected} onChange={() => toggle(i)} style={{ accentColor: P.accent, width: 16, height: 16 }} /></td>
@@ -275,43 +314,43 @@ function StaffView() {
           </div>
           <p style={{ color: P.muted, fontSize: 12, marginTop: 10 }}>Need a new product or price change? Use the "Manage Products" tab above.</p>
           <div style={{ marginTop: 18, display: "flex", justifyContent: "flex-end" }}>
-            <button onClick={handleSend} style={S.btn()}>Send to {STORES[target]} →</button>
+            <button onClick={handleSend} disabled={sending} style={{ ...S.btn(), opacity: sending ? 0.6 : 1 }}>
+              {sending ? "Sending..." : `Send to ${STORES[target]} →`}
+            </button>
           </div>
         </>
       )}
 
       {tab === "manage" && (
-        <div>
-          <p style={{ color: P.muted, fontSize: 13, marginTop: 0 }}>Add new products, remove discontinued ones, or update prices. Changes apply to future lists.</p>
-
+        loading ? <Spinner /> : <div>
+          <p style={{ color: P.muted, fontSize: 13, marginTop: 0 }}>Add, remove, or update prices. Changes apply to future lists.</p>
           <div style={{ ...S.card, marginBottom: 16 }}>
             <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10, color: P.accent }}>+ Add New Product</div>
             <div style={S.row}>
               <div style={{ flex: 2 }}><input placeholder="Item name" value={newName} onChange={e => setNewName(e.target.value)} style={S.inp} /></div>
               <div style={{ flex: 1 }}><input placeholder="Price" type="number" value={newPrice} onChange={e => setNewPrice(e.target.value)} style={S.inp} /></div>
-              <button onClick={addProduct} style={S.btn()}>Add</button>
+              <button onClick={handleAddProduct} style={S.btn()}>Add</button>
             </div>
           </div>
-
-          {products.map((p, i) => (
-            <div key={i} style={{ ...S.card, marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+          {products.map((p) => (
+            <div key={p.id} style={{ ...S.card, marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
               <span style={{ fontSize: 14, fontWeight: 500, flex: 1 }}>{p.name}</span>
               <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                {editIdx === i
+                {editId === p.id
                   ? <>
                     <input type="number" value={editPrice} onChange={e => setEditPrice(e.target.value)} style={{ ...S.inp, width: 80, padding: "5px 8px" }} autoFocus />
-                    <button onClick={() => savePrice(i)} style={{ ...S.btn(), padding: "6px 12px", fontSize: 12 }}>Save</button>
-                    <button onClick={() => setEditIdx(null)} style={{ ...S.btn("ghost"), padding: "6px 12px", fontSize: 12 }}>Cancel</button>
+                    <button onClick={() => savePrice(p.id)} style={{ ...S.btn(), padding: "6px 12px", fontSize: 12 }}>Save</button>
+                    <button onClick={() => setEditId(null)} style={{ ...S.btn("ghost"), padding: "6px 12px", fontSize: 12 }}>Cancel</button>
                   </>
-                  : <button onClick={() => { setEditIdx(i); setEditPrice(p.price); }} style={{ background: "none", border: `1px solid ${P.border}`, borderRadius: 8, color: P.accent, padding: "5px 12px", cursor: "pointer", fontWeight: 700 }}>{currency(p.price)}</button>
+                  : <button onClick={() => { setEditId(p.id); setEditPrice(p.price); }} style={{ background: "none", border: `1px solid ${P.border}`, borderRadius: 8, color: P.accent, padding: "5px 12px", cursor: "pointer", fontWeight: 700 }}>{currency(p.price)}</button>
                 }
-                {confirmDeleteIdx === i
+                {confirmDeleteId === p.id
                   ? <>
                     <span style={{ fontSize: 11, color: P.red }}>Delete?</span>
-                    <button onClick={() => deleteProduct(i)} style={{ ...S.btn("danger"), padding: "5px 10px", fontSize: 11 }}>Yes</button>
-                    <button onClick={() => setConfirmDeleteIdx(null)} style={{ ...S.btn("ghost"), padding: "5px 10px", fontSize: 11 }}>No</button>
+                    <button onClick={() => handleDeleteProduct(p.id)} style={{ ...S.btn("danger"), padding: "5px 10px", fontSize: 11 }}>Yes</button>
+                    <button onClick={() => setConfirmDeleteId(null)} style={{ ...S.btn("ghost"), padding: "5px 10px", fontSize: 11 }}>No</button>
                   </>
-                  : <button onClick={() => setConfirmDeleteIdx(i)} style={{ background: "none", border: `1px solid ${P.red}44`, borderRadius: 7, color: P.red, padding: "5px 10px", fontSize: 11, cursor: "pointer" }}>🗑</button>
+                  : <button onClick={() => setConfirmDeleteId(p.id)} style={{ background: "none", border: `1px solid ${P.red}44`, borderRadius: 7, color: P.red, padding: "5px 10px", fontSize: 11, cursor: "pointer" }}>🗑</button>
                 }
               </div>
             </div>
@@ -326,29 +365,45 @@ function StaffView() {
 function SellerView({ role, onRecordChange }) {
   const isToyota = role === "toyota";
   const storeColor = role === "toyota" ? P.toyota : P.aws;
-  const allProds = db.getProducts();
 
-  // ALL hooks at top level
   const [view, setView] = useState("menu");
   const [selectedList, setSelectedList] = useState(null);
   const [step, setStep] = useState("selectList");
   const [items, setItems] = useState([]);
-  const [stock50Items, setStock50Items] = useState(allProds.map(p => ({ name: p.name, price: p.price, stock50: 0 })));
+  const [allProds, setAllProds] = useState([]);
+  const [stock50Items, setStock50Items] = useState([]);
   const [payments, setPayments] = useState([{ ref: "", amount: "" }]);
   const [startingCash, setStartingCash] = useState("");
   const [expenses, setExpenses] = useState("");
   const [savedId, setSavedId] = useState(null);
   const [submitDone, setSubmitDone] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
+  const [myLists, setMyLists] = useState([]);
+  const [myRecords, setMyRecords] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
 
-  const myRecords = db.getRecordsByStore(role);
-  const myLists = db.getLists().filter(l => l.store === role);
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    const [lists, records, prods] = await Promise.all([
+      api.getLists(role), api.getRecordsByStore(role), api.getProducts()
+    ]);
+    setMyLists(lists);
+    setMyRecords(records);
+    setAllProds(prods);
+    setStock50Items(prods.map(p => ({ ...p, stock50: 0 })));
+    setLoading(false);
+  }, [role]);
+
+  useEffect(() => { loadData(); }, [loadData]);
 
   const resetAll = () => {
     setView("menu"); setSelectedList(null); setStep("selectList");
-    setItems([]); setStock50Items(allProds.map(p => ({ name: p.name, price: p.price, stock50: 0 })));
-    setPayments([{ ref: "", amount: "" }]); setStartingCash(""); setExpenses("");
+    setItems([]); setPayments([{ ref: "", amount: "" }]);
+    setStartingCash(""); setExpenses("");
     setSavedId(null); setSubmitDone(false); setConfirmDeleteId(null);
+    setStock50Items(allProds.map(p => ({ ...p, stock50: 0 })));
+    loadData();
   };
 
   const selectList = (list) => {
@@ -379,31 +434,35 @@ function SellerView({ role, onRecordChange }) {
   const updPayment = (i, f, v) => setPayments(p => p.map((x, j) => j === i ? { ...x, [f]: v } : x));
   const removePayment = (i) => setPayments(p => p.filter((_, j) => j !== i));
 
-  const handleSave = () => {
-    const newId = uid();
-    db.addRecord({
-      id: newId, listId: selectedList.id, store: role, date: selectedList.date,
+  const handleSave = async () => {
+    setSaving(true);
+    const rec = await api.addRecord({
+      listId: selectedList.id, store: role, date: selectedList.date,
       items, onlinePayments: payments.filter(p => p.ref || p.amount),
       startingCash: Number(startingCash) || 0, expenses: Number(expenses) || 0,
-      status: "draft", submittedAt: null, confirmedAt: null,
     });
-    setSavedId(newId); onRecordChange();
+    setSavedId(rec.id);
+    setSaving(false);
+    onRecordChange();
   };
 
-  const handleSubmit = () => {
-    db.updateRecord(savedId, { status: "submitted", submittedAt: new Date().toISOString() });
-    setSubmitDone(true); onRecordChange();
+  const handleSubmit = async () => {
+    await api.updateRecord(savedId, { status: "submitted", submittedAt: new Date().toISOString() });
+    setSubmitDone(true);
+    onRecordChange();
   };
 
-  const handleDeleteRecord = (id) => {
-    db.deleteRecord(id); setConfirmDeleteId(null); onRecordChange();
+  const handleDeleteRecord = async (id) => {
+    await api.deleteRecord(id);
+    setConfirmDeleteId(null);
+    onRecordChange();
+    loadData();
   };
 
   const totals = items.length
     ? calcTotals({ store: role, items, onlinePayments: payments, startingCash: Number(startingCash) || 0, expenses: Number(expenses) || 0 })
     : { totalSales: 0, onlineTotal: 0, endingCash: 0 };
 
-  // ── MENU ──
   if (view === "menu") return (
     <div style={S.sec}>
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 18 }}>
@@ -423,58 +482,57 @@ function SellerView({ role, onRecordChange }) {
     </div>
   );
 
-  // ── HISTORY ──
   if (view === "history") return (
     <div style={S.sec}>
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
-        <button onClick={() => { setView("menu"); setConfirmDeleteId(null); }} style={{ ...S.btn("ghost"), padding: "6px 12px", fontSize: 13 }}>← Back</button>
+        <button onClick={() => { setView("menu"); setConfirmDeleteId(null); loadData(); }} style={{ ...S.btn("ghost"), padding: "6px 12px", fontSize: 13 }}>← Back</button>
         <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>My Records</h2>
       </div>
-      {myRecords.length === 0 && <div style={{ ...S.card, textAlign: "center", padding: 40, color: P.muted }}>No records yet.</div>}
-      {[...myRecords].reverse().map(r => {
-        const t = calcTotals(r);
-        const canDelete = r.status === "draft" || r.status === "confirmed";
-        return (
-          <div key={r.id} style={{ ...S.card, marginBottom: 10 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
-              <span style={{ fontWeight: 700 }}>{fmtDate(r.date)}</span>
-              <StatusBadge status={r.status} />
+      {loading ? <Spinner /> : myRecords.length === 0
+        ? <div style={{ ...S.card, textAlign: "center", padding: 40, color: P.muted }}>No records yet.</div>
+        : myRecords.map(r => {
+          const t = calcTotals(r);
+          const canDelete = r.status === "draft" || r.status === "confirmed";
+          return (
+            <div key={r.id} style={{ ...S.card, marginBottom: 10 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                <span style={{ fontWeight: 700 }}>{fmtDate(r.date)}</span>
+                <StatusBadge status={r.status} />
+              </div>
+              <div style={{ fontSize: 13, color: P.muted }}>Total: <span style={{ color: P.green, fontWeight: 600 }}>{currency(t.totalSales)}</span></div>
+              {r.submittedAt && <div style={{ fontSize: 11, color: P.muted, marginTop: 2 }}>Submitted {fmtTime(r.submittedAt)}</div>}
+              {r.confirmedAt && <div style={{ fontSize: 11, color: P.green, marginTop: 2 }}>✓ Confirmed {fmtTime(r.confirmedAt)}</div>}
+              {r.status === "submitted" && <div style={{ fontSize: 11, color: P.muted, marginTop: 6, fontStyle: "italic" }}>Cannot delete — pending admin review.</div>}
+              {canDelete && (
+                confirmDeleteId === r.id
+                  ? <div style={{ display: "flex", gap: 8, marginTop: 10, alignItems: "center" }}>
+                    <span style={{ fontSize: 12, color: P.red, flex: 1 }}>Delete this record?</span>
+                    <button onClick={() => handleDeleteRecord(r.id)} style={{ ...S.btn("danger"), padding: "5px 12px", fontSize: 12 }}>Delete</button>
+                    <button onClick={() => setConfirmDeleteId(null)} style={{ ...S.btn("ghost"), padding: "5px 12px", fontSize: 12 }}>Cancel</button>
+                  </div>
+                  : <button onClick={() => setConfirmDeleteId(r.id)} style={{ background: "none", border: `1px solid ${P.red}44`, borderRadius: 7, color: P.red, padding: "5px 10px", fontSize: 11, marginTop: 8, cursor: "pointer" }}>🗑 Delete</button>
+              )}
             </div>
-            <div style={{ fontSize: 13, color: P.muted }}>Total: <span style={{ color: P.green, fontWeight: 600 }}>{currency(t.totalSales)}</span></div>
-            {r.submittedAt && <div style={{ fontSize: 11, color: P.muted, marginTop: 2 }}>Submitted {fmtTime(r.submittedAt)}</div>}
-            {r.confirmedAt && <div style={{ fontSize: 11, color: P.green, marginTop: 2 }}>✓ Confirmed {fmtTime(r.confirmedAt)}</div>}
-            {r.status === "submitted" && <div style={{ fontSize: 11, color: P.muted, marginTop: 6, fontStyle: "italic" }}>Cannot delete — pending admin review.</div>}
-            {canDelete && (
-              confirmDeleteId === r.id
-                ? <div style={{ display: "flex", gap: 8, marginTop: 10, alignItems: "center" }}>
-                  <span style={{ fontSize: 12, color: P.red, flex: 1 }}>Delete this record?</span>
-                  <button onClick={() => handleDeleteRecord(r.id)} style={{ ...S.btn("danger"), padding: "5px 12px", fontSize: 12 }}>Delete</button>
-                  <button onClick={() => setConfirmDeleteId(null)} style={{ ...S.btn("ghost"), padding: "5px 12px", fontSize: 12 }}>Cancel</button>
-                </div>
-                : <button onClick={() => setConfirmDeleteId(r.id)} style={{ background: "none", border: `1px solid ${P.red}44`, borderRadius: 7, color: P.red, padding: "5px 10px", fontSize: 11, marginTop: 8, cursor: "pointer" }}>🗑 Delete</button>
-            )}
-          </div>
-        );
-      })}
+          );
+        })
+      }
     </div>
   );
 
-  // ── SUBMIT DONE ──
   if (submitDone) return (
     <div style={{ ...S.sec, textAlign: "center", paddingTop: 60 }}>
       <div style={{ fontSize: 48, marginBottom: 12 }}>📨</div>
       <div style={{ fontSize: 20, fontWeight: 700, color: P.orange }}>Submitted to Admin!</div>
       <div style={{ color: P.muted, marginTop: 8, fontSize: 13 }}>The admin will review and confirm your record.</div>
       <div style={{ display: "flex", gap: 12, justifyContent: "center", marginTop: 24 }}>
-        <button style={S.btn("ghost")} onClick={() => { setView("history"); setSubmitDone(false); }}>View My Records</button>
+        <button style={S.btn("ghost")} onClick={() => { setView("history"); setSubmitDone(false); loadData(); }}>View My Records</button>
         <button style={S.btn()} onClick={resetAll}>Done</button>
       </div>
     </div>
   );
 
-  // ── SAVED → SUBMIT ──
   if (savedId) {
-    const rec = db.getRecords().find(r => r.id === savedId);
+    const rec = myRecords.find(r => r.id === savedId);
     const t = rec ? calcTotals(rec) : { totalSales: 0 };
     return (
       <div style={S.sec}>
@@ -493,24 +551,24 @@ function SellerView({ role, onRecordChange }) {
     );
   }
 
-  // ── ENTRY: SELECT LIST ──
   if (view === "entry" && step === "selectList") return (
     <div style={S.sec}>
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
         <button onClick={() => setView("menu")} style={{ ...S.btn("ghost"), padding: "6px 12px", fontSize: 13 }}>← Back</button>
         <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>Select Today's List</h2>
       </div>
-      {myLists.length === 0 && <div style={{ ...S.card, textAlign: "center", padding: 32, color: P.muted }}>No lists available. Ask main store staff to prepare one.</div>}
-      {myLists.map(l => (
-        <div key={l.id} onClick={() => selectList(l)} style={{ ...S.card, marginBottom: 10, cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div><div style={{ fontWeight: 700 }}>{fmtDate(l.date)}</div><div style={{ fontSize: 12, color: P.muted }}>{l.items.length} items · {l.items.reduce((s, i) => s + i.qty, 0)} pcs</div></div>
-          <span style={{ color: P.accent, fontSize: 20 }}>→</span>
-        </div>
-      ))}
+      {loading ? <Spinner /> : myLists.length === 0
+        ? <div style={{ ...S.card, textAlign: "center", padding: 32, color: P.muted }}>No lists available. Ask main store staff to prepare one.</div>
+        : myLists.map(l => (
+          <div key={l.id} onClick={() => selectList(l)} style={{ ...S.card, marginBottom: 10, cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div><div style={{ fontWeight: 700 }}>{fmtDate(l.date)}</div><div style={{ fontSize: 12, color: P.muted }}>{l.items.length} items · {l.items.reduce((s, i) => s + i.qty, 0)} pcs</div></div>
+            <span style={{ color: P.accent, fontSize: 20 }}>→</span>
+          </div>
+        ))
+      }
     </div>
   );
 
-  // ── ENTRY: STOCK50 (Toyota only) ──
   if (view === "entry" && step === "stock50") return (
     <div style={S.sec}>
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
@@ -518,7 +576,7 @@ function SellerView({ role, onRecordChange }) {
         <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>50% off Stock Entry</h2>
         <span style={S.pill(P.red)}>STEP 1</span>
       </div>
-      <p style={{ color: P.muted, fontSize: 13, marginTop: 4, marginBottom: 14 }}>Enter yesterday's leftovers as today's 50% off stock. All products listed.</p>
+      <p style={{ color: P.muted, fontSize: 13, marginTop: 4, marginBottom: 14 }}>Enter yesterday's leftovers as today's 50% off stock.</p>
       <div style={S.tw}>
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead><tr>
@@ -530,7 +588,7 @@ function SellerView({ role, onRecordChange }) {
             {allProds.map((prod, i) => {
               const inList = selectedList?.items.find(x => x.name === prod.name);
               return (
-                <tr key={i} style={{ background: stock50Items[i]?.stock50 > 0 ? "#2a1520" : "transparent" }}>
+                <tr key={prod.id} style={{ background: stock50Items[i]?.stock50 > 0 ? "#2a1520" : "transparent" }}>
                   <td style={{ ...S.td, textAlign: "left", fontSize: 12 }}>{prod.name}</td>
                   <td style={{ ...S.td, color: P.muted }}>{inList ? inList.qty : "—"}</td>
                   <td style={S.td}><Stepper value={stock50Items[i]?.stock50 || 0} onChange={v => updateStock50(i, v)} color={P.red} /></td>
@@ -546,11 +604,10 @@ function SellerView({ role, onRecordChange }) {
     </div>
   );
 
-  // ── ENTRY: SALES ──
-  const colsToyota = ["Item", "Price", "Stock", "Full Price", "5% off", "50% Stock", "50% Sales", "L/O", "Waste", "Total"];
-  const colsAWS = ["Item", "Price", "Stock", "Full Price", "L/O", "Total"];
-  const cols = isToyota ? colsToyota : colsAWS;
-  const colColor = (h) => h === "L/O" ? P.muted : h === "Waste" ? P.red : h === "50% Sales" ? P.red : h === "5% off" ? P.purple : h === "Total" ? P.green : P.muted;
+  const cols = isToyota
+    ? ["Item","Price","Stock","Full Price","5% off","50% Stock","50% Sales","L/O","Waste","Total"]
+    : ["Item","Price","Stock","Full Price","L/O","Total"];
+  const colColor = (h) => h==="L/O"?P.muted:h==="Waste"?P.red:h==="50% Sales"?P.red:h==="5% off"?P.purple:h==="Total"?P.green:P.muted;
 
   return (
     <div style={S.sec}>
@@ -564,9 +621,7 @@ function SellerView({ role, onRecordChange }) {
       </div>
       <div style={S.tw}>
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
-          <thead><tr>
-            {cols.map((h, i) => <th key={i} style={{ ...S.th, textAlign: i === 0 ? "left" : "center", color: colColor(h) }}>{h}</th>)}
-          </tr></thead>
+          <thead><tr>{cols.map((h, i) => <th key={i} style={{ ...S.th, textAlign: i===0?"left":"center", color: colColor(h) }}>{h}</th>)}</tr></thead>
           <tbody>
             {items.map((item, i) => {
               const lo = calcLO(item), waste = calcWaste(item), total = calcItemTotal(item, isToyota);
@@ -575,19 +630,19 @@ function SellerView({ role, onRecordChange }) {
                   <td style={{ ...S.td, textAlign: "left", fontWeight: 500, fontSize: 12 }}>{item.name}</td>
                   <td style={{ ...S.td, color: P.muted, fontSize: 12 }}>{currency(item.price)}</td>
                   <td style={{ ...S.td, color: P.muted }}>{item.qty}{isToyota && item.stock50 > 0 && <span style={{ color: P.red, fontSize: 10 }}> +{item.stock50}</span>}</td>
-                  <td style={S.td}><Stepper value={item.soldFull || 0} onChange={v => updateItem(i, "soldFull", v)} color={P.accent} /></td>
-                  {isToyota && <td style={S.td}><Stepper value={item.sold5 || 0} onChange={v => updateItem(i, "sold5", v)} color={P.purple} /></td>}
-                  {isToyota && <td style={{ ...S.td, color: P.red }}>{item.stock50 || 0}</td>}
-                  {isToyota && <td style={S.td}><Stepper value={item.sold50 || 0} onChange={v => updateItem(i, "sold50", Math.min(item.stock50 || 0, v))} color={P.red} /></td>}
-                  <td style={{ ...S.td, color: lo > 0 ? P.orange : P.muted, fontWeight: 600 }}>{lo}</td>
-                  {isToyota && <td style={{ ...S.td, color: waste > 0 ? P.red : P.muted, fontWeight: 600 }}>{waste}</td>}
-                  <td style={{ ...S.td, color: P.green, fontWeight: 700 }}>{currency(total)}</td>
+                  <td style={S.td}><Stepper value={item.soldFull||0} onChange={v=>updateItem(i,"soldFull",v)} color={P.accent}/></td>
+                  {isToyota&&<td style={S.td}><Stepper value={item.sold5||0} onChange={v=>updateItem(i,"sold5",v)} color={P.purple}/></td>}
+                  {isToyota&&<td style={{...S.td,color:P.red}}>{item.stock50||0}</td>}
+                  {isToyota&&<td style={S.td}><Stepper value={item.sold50||0} onChange={v=>updateItem(i,"sold50",Math.min(item.stock50||0,v))} color={P.red}/></td>}
+                  <td style={{...S.td,color:lo>0?P.orange:P.muted,fontWeight:600}}>{lo}</td>
+                  {isToyota&&<td style={{...S.td,color:waste>0?P.red:P.muted,fontWeight:600}}>{waste}</td>}
+                  <td style={{...S.td,color:P.green,fontWeight:700}}>{currency(total)}</td>
                 </tr>
               );
             })}
             <tr style={{ background: P.surface, fontWeight: 700 }}>
-              <td colSpan={isToyota ? 9 : 5} style={{ ...S.td, textAlign: "right", color: P.muted }}>Total Sales</td>
-              <td style={{ ...S.td, color: P.green }}>{currency(totals.totalSales)}</td>
+              <td colSpan={isToyota?9:5} style={{...S.td,textAlign:"right",color:P.muted}}>Total Sales</td>
+              <td style={{...S.td,color:P.green}}>{currency(totals.totalSales)}</td>
             </tr>
           </tbody>
         </table>
@@ -595,29 +650,31 @@ function SellerView({ role, onRecordChange }) {
       <div style={{ ...S.card, margin: "14px 0" }}>
         <div style={{ fontWeight: 700, marginBottom: 10, color: P.accent }}>💰 Cash Summary</div>
         <div style={S.row}>
-          <div style={S.col}><label style={S.lbl}>Starting Cash</label><input type="number" value={startingCash} onChange={e => setStartingCash(e.target.value)} style={S.inp} placeholder="0" /></div>
-          <div style={S.col}><label style={S.lbl}>Expenses</label><input type="number" value={expenses} onChange={e => setExpenses(e.target.value)} style={S.inp} placeholder="0" /></div>
+          <div style={S.col}><label style={S.lbl}>Starting Cash</label><input type="number" value={startingCash} onChange={e=>setStartingCash(e.target.value)} style={S.inp} placeholder="0"/></div>
+          <div style={S.col}><label style={S.lbl}>Expenses</label><input type="number" value={expenses} onChange={e=>setExpenses(e.target.value)} style={S.inp} placeholder="0"/></div>
         </div>
         <div style={S.sb}>
-          <div style={{ display: "flex", justifyContent: "space-between", padding: "4px 0", fontSize: 13 }}><span style={{ color: P.muted }}>Total Sales</span><span style={{ color: P.green, fontWeight: 600 }}>{currency(totals.totalSales)}</span></div>
-          <div style={{ display: "flex", justifyContent: "space-between", padding: "4px 0", fontSize: 13 }}><span style={{ color: P.muted }}>Online Payment</span><span style={{ color: P.blue }}>{currency(totals.onlineTotal)}</span></div>
-          <div style={{ display: "flex", justifyContent: "space-between", padding: "4px 0", fontSize: 13 }}><span style={{ color: P.muted }}>Expenses</span><span style={{ color: P.red }}>−{currency(expenses)}</span></div>
-          <div style={{ borderTop: `1px solid ${P.border}`, marginTop: 6, paddingTop: 6, display: "flex", justifyContent: "space-between", fontSize: 15, fontWeight: 700 }}><span>Ending Cash</span><span style={{ color: P.accent }}>{currency(totals.endingCash)}</span></div>
+          <div style={{display:"flex",justifyContent:"space-between",padding:"4px 0",fontSize:13}}><span style={{color:P.muted}}>Total Sales</span><span style={{color:P.green,fontWeight:600}}>{currency(totals.totalSales)}</span></div>
+          <div style={{display:"flex",justifyContent:"space-between",padding:"4px 0",fontSize:13}}><span style={{color:P.muted}}>Online Payment</span><span style={{color:P.blue}}>{currency(totals.onlineTotal)}</span></div>
+          <div style={{display:"flex",justifyContent:"space-between",padding:"4px 0",fontSize:13}}><span style={{color:P.muted}}>Expenses</span><span style={{color:P.red}}>−{currency(expenses)}</span></div>
+          <div style={{borderTop:`1px solid ${P.border}`,marginTop:6,paddingTop:6,display:"flex",justifyContent:"space-between",fontSize:15,fontWeight:700}}><span>Ending Cash</span><span style={{color:P.accent}}>{currency(totals.endingCash)}</span></div>
         </div>
       </div>
       <div style={{ ...S.card, marginBottom: 18 }}>
         <div style={{ fontWeight: 700, marginBottom: 10, color: P.accent }}>📱 Online Payments (Gcash / BPI)</div>
         {payments.map((p, i) => (
           <div key={i} style={{ ...S.row, marginBottom: 8 }}>
-            <div style={{ flex: 2 }}><input placeholder="Ref No." value={p.ref} onChange={e => updPayment(i, "ref", e.target.value)} style={S.inp} /></div>
-            <div style={{ flex: 1 }}><input placeholder="Amount" type="number" value={p.amount} onChange={e => updPayment(i, "amount", e.target.value)} style={S.inp} /></div>
-            {payments.length > 1 && <button onClick={() => removePayment(i)} style={{ ...S.btn("danger"), padding: "9px 12px" }}>✕</button>}
+            <div style={{flex:2}}><input placeholder="Ref No." value={p.ref} onChange={e=>updPayment(i,"ref",e.target.value)} style={S.inp}/></div>
+            <div style={{flex:1}}><input placeholder="Amount" type="number" value={p.amount} onChange={e=>updPayment(i,"amount",e.target.value)} style={S.inp}/></div>
+            {payments.length>1&&<button onClick={()=>removePayment(i)} style={{...S.btn("danger"),padding:"9px 12px"}}>✕</button>}
           </div>
         ))}
-        <button onClick={addPayment} style={{ ...S.btn("ghost"), fontSize: 13 }}>+ Add Payment</button>
+        <button onClick={addPayment} style={{...S.btn("ghost"),fontSize:13}}>+ Add Payment</button>
       </div>
       <div style={{ display: "flex", justifyContent: "flex-end" }}>
-        <button onClick={handleSave} style={S.btn()}>Save Record ✓</button>
+        <button onClick={handleSave} disabled={saving} style={{ ...S.btn(), opacity: saving ? 0.6 : 1 }}>
+          {saving ? "Saving..." : "Save Record ✓"}
+        </button>
       </div>
     </div>
   );
@@ -627,86 +684,110 @@ function SellerView({ role, onRecordChange }) {
 function AdminView({ onRecordChange }) {
   const now = new Date();
   const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-
   const [tab, setTab] = useState("inbox");
   const [viewYear, setViewYear] = useState(now.getFullYear());
-  const [viewMonth, setViewMonth] = useState(now.getMonth() + 1);
+  const [viewMonth, setViewMonth] = useState(now.getMonth()+1);
   const [filterStore, setFilterStore] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
-  const [tick, setTick] = useState(0);
+  const [submitted, setSubmitted] = useState([]);
+  const [records, setRecords] = useState([]);
+  const [loading, setLoading] = useState(false);
 
-  const refresh = () => { setTick(t => t + 1); onRecordChange(); };
+  const loadInbox = useCallback(async () => {
+    setLoading(true);
+    const data = await api.getSubmitted();
+    setSubmitted(data);
+    setLoading(false);
+  }, []);
 
-  const submitted = db.getRecords().filter(r => r.status === "submitted");
-  const records = db.getRecordsByMonth(viewYear, viewMonth)
-    .filter(r => (filterStore === "all" || r.store === filterStore) && (filterStatus === "all" || r.status === filterStatus))
-    .sort((a, b) => a.date.localeCompare(b.date));
-  const grandTotal = records.reduce((s, r) => s + calcTotals(r).totalSales, 0);
+  const loadRecords = useCallback(async () => {
+    setLoading(true);
+    const data = await api.getRecordsByMonth(viewYear, viewMonth);
+    setRecords(data);
+    setLoading(false);
+  }, [viewYear, viewMonth]);
 
-  const confirmRecord = (id) => { db.updateRecord(id, { status: "confirmed", confirmedAt: new Date().toISOString() }); refresh(); };
-  const deleteRecord = (id) => { db.deleteRecord(id); setConfirmDeleteId(null); refresh(); };
+  useEffect(() => { if (tab === "inbox") loadInbox(); }, [tab, loadInbox]);
+  useEffect(() => { if (tab === "records") loadRecords(); }, [tab, loadRecords]);
+
+  const filteredRecords = records.filter(r =>
+    (filterStore === "all" || r.store === filterStore) &&
+    (filterStatus === "all" || r.status === filterStatus)
+  ).sort((a, b) => a.date.localeCompare(b.date));
+
+  const grandTotal = filteredRecords.reduce((s, r) => s + calcTotals(r).totalSales, 0);
+
+  const confirmRecord = async (id) => {
+    await api.updateRecord(id, { status: "confirmed", confirmedAt: new Date().toISOString() });
+    onRecordChange();
+    loadInbox();
+  };
+
+  const deleteRecord = async (id) => {
+    await api.deleteRecord(id);
+    setConfirmDeleteId(null);
+    onRecordChange();
+    if (tab === "inbox") loadInbox(); else loadRecords();
+  };
 
   const exportCSV = () => {
     const rows = [["Date","Store","Item","Stock","Full Price Sales","5% Sales","50% Stock","50% Sales","L/O","Waste","Total","Status"]];
-    records.forEach(r => {
+    filteredRecords.forEach(r => {
       const isToyota = r.store === "toyota";
-      r.items.forEach(item => rows.push([r.date, STORES[r.store], item.name, item.qty, item.soldFull, isToyota ? item.sold5 : "", isToyota ? item.stock50 : "", isToyota ? item.sold50 : "", calcLO(item), isToyota ? calcWaste(item) : "", calcItemTotal(item, isToyota).toFixed(2), r.status]));
-      rows.push([r.date, STORES[r.store], "--- TOTAL ---", "", "", "", "", "", "", "", calcTotals(r).totalSales.toFixed(2), r.status]);
+      r.items.forEach(item => rows.push([r.date,STORES[r.store],item.name,item.qty,item.soldFull,isToyota?item.sold5:"",isToyota?item.stock50:"",isToyota?item.sold50:"",calcLO(item),isToyota?calcWaste(item):"",calcItemTotal(item,isToyota).toFixed(2),r.status]));
+      rows.push([r.date,STORES[r.store],"--- TOTAL ---","","","","","","","",calcTotals(r).totalSales.toFixed(2),r.status]);
       rows.push([]);
     });
-    const csv = rows.map(r => r.join(",")).join("\n");
+    const csv = rows.map(r=>r.join(",")).join("\n");
     const dataUri = "data:text/csv;charset=utf-8," + encodeURIComponent(csv);
     const a = document.createElement("a");
     a.href = dataUri;
-    a.download = `sales_${viewYear}_${String(viewMonth).padStart(2, "0")}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    a.download = `sales_${viewYear}_${String(viewMonth).padStart(2,"0")}.csv`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
   };
 
   const RecordCard = ({ r, showConfirm }) => {
     const isToyota = r.store === "toyota";
     const t = calcTotals(r);
     return (
-      <div style={{ ...S.card, marginBottom: 12, borderColor: showConfirm ? P.orange + "55" : P.border }}>
+      <div style={{ ...S.card, marginBottom: 12, borderColor: showConfirm ? P.orange+"55" : P.border }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6, flexWrap: "wrap", gap: 6 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
             <span style={{ fontWeight: 700 }}>{fmtDate(r.date)}</span>
-            <span style={S.pill(r.store === "toyota" ? P.toyota : P.aws)}>{STORES[r.store]}</span>
-            <StatusBadge status={r.status} />
+            <span style={S.pill(r.store==="toyota"?P.toyota:P.aws)}>{STORES[r.store]}</span>
+            <StatusBadge status={r.status}/>
           </div>
           <span style={{ color: P.green, fontWeight: 700 }}>{currency(t.totalSales)}</span>
         </div>
-        {r.submittedAt && <div style={{ fontSize: 11, color: P.muted, marginBottom: 6 }}>Submitted: {fmtTime(r.submittedAt)}</div>}
-        {r.confirmedAt && <div style={{ fontSize: 11, color: P.green, marginBottom: 6 }}>✓ Confirmed {fmtTime(r.confirmedAt)}</div>}
+        {r.submittedAt&&<div style={{fontSize:11,color:P.muted,marginBottom:6}}>Submitted: {fmtTime(r.submittedAt)}</div>}
+        {r.confirmedAt&&<div style={{fontSize:11,color:P.green,marginBottom:6}}>✓ Confirmed {fmtTime(r.confirmedAt)}</div>}
         <div style={S.tw}>
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead><tr>
-              <th style={{ ...S.th, textAlign: "left" }}>Item</th>
-              <th style={S.th}>Stock</th>
-              <th style={S.th}>Full</th>
-              {isToyota && <th style={{ ...S.th, color: P.purple }}>5%</th>}
-              {isToyota && <th style={{ ...S.th, color: P.red }}>50% Stk</th>}
-              {isToyota && <th style={{ ...S.th, color: P.red }}>50% Sls</th>}
-              <th style={{ ...S.th, color: P.orange }}>L/O</th>
-              {isToyota && <th style={{ ...S.th, color: P.red }}>Waste</th>}
-              <th style={{ ...S.th, color: P.green }}>Total</th>
+              <th style={{...S.th,textAlign:"left"}}>Item</th>
+              <th style={S.th}>Stock</th><th style={S.th}>Full</th>
+              {isToyota&&<th style={{...S.th,color:P.purple}}>5%</th>}
+              {isToyota&&<th style={{...S.th,color:P.red}}>50%Stk</th>}
+              {isToyota&&<th style={{...S.th,color:P.red}}>50%Sls</th>}
+              <th style={{...S.th,color:P.orange}}>L/O</th>
+              {isToyota&&<th style={{...S.th,color:P.red}}>Waste</th>}
+              <th style={{...S.th,color:P.green}}>Total</th>
             </tr></thead>
             <tbody>
-              {r.items.map((item, i) => {
-                const lo = calcLO(item), waste = calcWaste(item), total = calcItemTotal(item, isToyota);
+              {r.items.map((item,i)=>{
+                const lo=calcLO(item),waste=calcWaste(item),total=calcItemTotal(item,isToyota);
                 return (
                   <tr key={i}>
-                    <td style={{ ...S.td, textAlign: "left", fontSize: 11 }}>{item.name}</td>
+                    <td style={{...S.td,textAlign:"left",fontSize:11}}>{item.name}</td>
                     <td style={S.td}>{item.qty}</td>
                     <td style={S.td}>{item.soldFull}</td>
-                    {isToyota && <td style={{ ...S.td, color: P.purple }}>{item.sold5 || "-"}</td>}
-                    {isToyota && <td style={{ ...S.td, color: P.red }}>{item.stock50 || "-"}</td>}
-                    {isToyota && <td style={{ ...S.td, color: P.red }}>{item.sold50 || "-"}</td>}
-                    <td style={{ ...S.td, color: lo > 0 ? P.orange : P.muted, fontWeight: 600 }}>{lo}</td>
-                    {isToyota && <td style={{ ...S.td, color: waste > 0 ? P.red : P.muted, fontWeight: 600 }}>{waste}</td>}
-                    <td style={{ ...S.td, color: P.green, fontWeight: 700 }}>{currency(total)}</td>
+                    {isToyota&&<td style={{...S.td,color:P.purple}}>{item.sold5||"-"}</td>}
+                    {isToyota&&<td style={{...S.td,color:P.red}}>{item.stock50||"-"}</td>}
+                    {isToyota&&<td style={{...S.td,color:P.red}}>{item.sold50||"-"}</td>}
+                    <td style={{...S.td,color:lo>0?P.orange:P.muted,fontWeight:600}}>{lo}</td>
+                    {isToyota&&<td style={{...S.td,color:waste>0?P.red:P.muted,fontWeight:600}}>{waste}</td>}
+                    <td style={{...S.td,color:P.green,fontWeight:700}}>{currency(total)}</td>
                   </tr>
                 );
               })}
@@ -714,16 +795,16 @@ function AdminView({ onRecordChange }) {
           </table>
         </div>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 10, flexWrap: "wrap", gap: 8 }}>
-          <div style={{ fontSize: 12, color: P.muted }}>Cash: {currency(r.startingCash)} → {currency(t.endingCash)} | Online: {currency(t.onlineTotal)} | Exp: {currency(r.expenses)}</div>
+          <div style={{ fontSize: 12, color: P.muted }}>Cash: {currency(r.startingCash)} → {currency(t.endingCash)} | Online: {currency(t.onlineTotal)}</div>
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            {showConfirm && <button onClick={() => confirmRecord(r.id)} style={{ ...S.btn("success"), padding: "7px 16px", fontSize: 13 }}>✓ Confirm</button>}
-            {confirmDeleteId === r.id
+            {showConfirm && <button onClick={()=>confirmRecord(r.id)} style={{...S.btn("success"),padding:"7px 16px",fontSize:13}}>✓ Confirm</button>}
+            {confirmDeleteId===r.id
               ? <>
-                <span style={{ fontSize: 12, color: P.red }}>Delete?</span>
-                <button onClick={() => deleteRecord(r.id)} style={{ ...S.btn("danger"), padding: "5px 10px", fontSize: 12 }}>Yes</button>
-                <button onClick={() => setConfirmDeleteId(null)} style={{ ...S.btn("ghost"), padding: "5px 10px", fontSize: 12 }}>No</button>
-              </>
-              : <button onClick={() => setConfirmDeleteId(r.id)} style={{ background: "none", border: `1px solid ${P.red}44`, borderRadius: 7, color: P.red, padding: "5px 10px", fontSize: 11, cursor: "pointer" }}>🗑</button>
+                  <span style={{fontSize:12,color:P.red}}>Delete?</span>
+                  <button onClick={()=>deleteRecord(r.id)} style={{...S.btn("danger"),padding:"5px 10px",fontSize:12}}>Yes</button>
+                  <button onClick={()=>setConfirmDeleteId(null)} style={{...S.btn("ghost"),padding:"5px 10px",fontSize:12}}>No</button>
+                </>
+              : <button onClick={()=>setConfirmDeleteId(r.id)} style={{background:"none",border:`1px solid ${P.red}44`,borderRadius:7,color:P.red,padding:"5px 10px",fontSize:11,cursor:"pointer"}}>🗑</button>
             }
           </div>
         </div>
@@ -741,39 +822,40 @@ function AdminView({ onRecordChange }) {
       <h2 style={{ margin: "0 0 14px", fontSize: 18, fontWeight: 700 }}>Admin Dashboard</h2>
       <div style={{ display: "flex", gap: 8, marginBottom: 18, flexWrap: "wrap" }}>
         {tabs.map(t => (
-          <button key={t.id} onClick={() => { setTab(t.id); setConfirmDeleteId(null); }} style={{ ...S.btn(tab === t.id ? "primary" : "ghost"), padding: "8px 14px", fontSize: 13, position: "relative" }}>
+          <button key={t.id} onClick={() => { setTab(t.id); setConfirmDeleteId(null); }} style={{ ...S.btn(tab===t.id?"primary":"ghost"), padding: "8px 14px", fontSize: 13, position: "relative" }}>
             {t.label}
-            {t.badge > 0 && <span style={{ position: "absolute", top: -6, right: -6, background: P.red, color: "#fff", borderRadius: "50%", width: 18, height: 18, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700 }}>{t.badge}</span>}
+            {t.badge>0&&<span style={{position:"absolute",top:-6,right:-6,background:P.red,color:"#fff",borderRadius:"50%",width:18,height:18,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:700}}>{t.badge}</span>}
           </button>
         ))}
       </div>
 
-      {tab === "inbox" && (
-        <div>
-          {submitted.length === 0 && <div style={{ ...S.card, textAlign: "center", padding: 40, color: P.muted }}><div style={{ fontSize: 32, marginBottom: 8 }}>📭</div>No pending submissions.</div>}
-          {submitted.map(r => <RecordCard key={r.id} r={r} showConfirm={true} />)}
-        </div>
+      {tab==="inbox"&&(
+        loading ? <Spinner /> : submitted.length===0
+          ? <div style={{...S.card,textAlign:"center",padding:40,color:P.muted}}><div style={{fontSize:32,marginBottom:8}}>📭</div>No pending submissions.</div>
+          : submitted.map(r=><RecordCard key={r.id} r={r} showConfirm={true}/>)
       )}
 
-      {tab === "records" && (
+      {tab==="records"&&(
         <>
-          <div style={{ ...S.row, marginBottom: 14 }}>
-            <div style={S.col}><label style={S.lbl}>Year</label><select value={viewYear} onChange={e => setViewYear(Number(e.target.value))} style={S.inp}>{[2024,2025,2026].map(y => <option key={y}>{y}</option>)}</select></div>
-            <div style={S.col}><label style={S.lbl}>Month</label><select value={viewMonth} onChange={e => setViewMonth(Number(e.target.value))} style={S.inp}>{months.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}</select></div>
-            <div style={S.col}><label style={S.lbl}>Store</label><select value={filterStore} onChange={e => setFilterStore(e.target.value)} style={S.inp}><option value="all">All</option><option value="toyota">Toyota</option><option value="aws">AWS</option></select></div>
-            <div style={S.col}><label style={S.lbl}>Status</label><select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={S.inp}><option value="all">All</option><option value="draft">Draft</option><option value="submitted">Submitted</option><option value="confirmed">Confirmed</option></select></div>
+          <div style={{...S.row,marginBottom:14}}>
+            <div style={S.col}><label style={S.lbl}>Year</label><select value={viewYear} onChange={e=>setViewYear(Number(e.target.value))} style={S.inp}>{[2024,2025,2026].map(y=><option key={y}>{y}</option>)}</select></div>
+            <div style={S.col}><label style={S.lbl}>Month</label><select value={viewMonth} onChange={e=>setViewMonth(Number(e.target.value))} style={S.inp}>{months.map((m,i)=><option key={i} value={i+1}>{m}</option>)}</select></div>
+            <div style={S.col}><label style={S.lbl}>Store</label><select value={filterStore} onChange={e=>setFilterStore(e.target.value)} style={S.inp}><option value="all">All</option><option value="toyota">Toyota</option><option value="aws">AWS</option></select></div>
+            <div style={S.col}><label style={S.lbl}>Status</label><select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} style={S.inp}><option value="all">All</option><option value="draft">Draft</option><option value="submitted">Submitted</option><option value="confirmed">Confirmed</option></select></div>
           </div>
-          <div style={{ display: "flex", gap: 10, marginBottom: 14, flexWrap: "wrap" }}>
-            <div style={{ ...S.card, flex: 1, minWidth: 90, textAlign: "center" }}><div style={{ color: P.muted, fontSize: 11, textTransform: "uppercase" }}>Days</div><div style={{ fontSize: 22, fontWeight: 700, color: P.accent }}>{records.length}</div></div>
-            <div style={{ ...S.card, flex: 1, minWidth: 90, textAlign: "center" }}><div style={{ color: P.muted, fontSize: 11, textTransform: "uppercase" }}>Total</div><div style={{ fontSize: 22, fontWeight: 700, color: P.green }}>{currency(grandTotal)}</div></div>
-            <div style={{ ...S.card, flex: 1, minWidth: 90, textAlign: "center" }}><div style={{ color: P.muted, fontSize: 11, textTransform: "uppercase" }}>Avg/Day</div><div style={{ fontSize: 22, fontWeight: 700, color: P.blue }}>{currency(records.length ? grandTotal / records.length : 0)}</div></div>
+          <button onClick={loadRecords} style={{...S.btn("ghost"),marginBottom:14,fontSize:13}}>🔄 Refresh</button>
+          <div style={{display:"flex",gap:10,marginBottom:14,flexWrap:"wrap"}}>
+            <div style={{...S.card,flex:1,minWidth:90,textAlign:"center"}}><div style={{color:P.muted,fontSize:11,textTransform:"uppercase"}}>Days</div><div style={{fontSize:22,fontWeight:700,color:P.accent}}>{filteredRecords.length}</div></div>
+            <div style={{...S.card,flex:1,minWidth:90,textAlign:"center"}}><div style={{color:P.muted,fontSize:11,textTransform:"uppercase"}}>Total</div><div style={{fontSize:22,fontWeight:700,color:P.green}}>{currency(grandTotal)}</div></div>
+            <div style={{...S.card,flex:1,minWidth:90,textAlign:"center"}}><div style={{color:P.muted,fontSize:11,textTransform:"uppercase"}}>Avg/Day</div><div style={{fontSize:22,fontWeight:700,color:P.blue}}>{currency(filteredRecords.length?grandTotal/filteredRecords.length:0)}</div></div>
           </div>
-          {records.length === 0 && <div style={{ ...S.card, textAlign: "center", padding: 40, color: P.muted }}>No records for {months[viewMonth - 1]} {viewYear}</div>}
-          {records.map(r => <RecordCard key={r.id} r={r} showConfirm={false} />)}
-          {records.length > 0 && <div style={{ marginTop: 14, display: "flex", justifyContent: "flex-end" }}><button onClick={exportCSV} style={S.btn()}>⬇ Export CSV ({months[viewMonth - 1]} {viewYear})</button></div>}
+          {loading ? <Spinner /> : filteredRecords.length===0
+            ? <div style={{...S.card,textAlign:"center",padding:40,color:P.muted}}>No records for {months[viewMonth-1]} {viewYear}</div>
+            : filteredRecords.map(r=><RecordCard key={r.id} r={r} showConfirm={false}/>)
+          }
+          {filteredRecords.length>0&&<div style={{marginTop:14,display:"flex",justifyContent:"flex-end"}}><button onClick={exportCSV} style={S.btn()}>⬇ Export CSV ({months[viewMonth-1]} {viewYear})</button></div>}
         </>
       )}
-
     </div>
   );
 }
@@ -782,13 +864,19 @@ function AdminView({ onRecordChange }) {
 export default function App() {
   const [role, setRole] = useState(null);
   const [pendingCount, setPendingCount] = useState(0);
-  const refreshPending = () => setPendingCount(db.getPendingCount());
+
+  const refreshPending = useCallback(async () => {
+    const count = await api.getPendingCount();
+    setPendingCount(count);
+  }, []);
+
+  useEffect(() => { refreshPending(); }, [refreshPending]);
 
   const roleConfig = {
-    staff:  { label: "Main Store", color: P.green, icon: "🏠" },
+    staff:  { label: "Main Store",      color: P.green,  icon: "🏠" },
     toyota: { label: "Toyota Sta Rosa", color: P.toyota, icon: "🏪" },
-    aws:    { label: "AWS", color: P.aws, icon: "🏪" },
-    admin:  { label: "Admin", color: P.accent, icon: "👩‍💼" },
+    aws:    { label: "AWS",             color: P.aws,    icon: "🏪" },
+    admin:  { label: "Admin",           color: P.accent, icon: "👩‍💼" },
   };
 
   if (!role) return <PinScreen onLogin={setRole} pendingCount={pendingCount} />;
@@ -802,14 +890,16 @@ export default function App() {
           <span style={{ fontSize: 17, fontWeight: 700, color: P.accent }}>🍞 Bread Sales</span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          {role === "admin" && pendingCount > 0 && <span style={{ background: P.red, color: "#fff", borderRadius: 12, padding: "2px 8px", fontSize: 12, fontWeight: 700 }}>{pendingCount} pending</span>}
+          {role === "admin" && pendingCount > 0 && (
+            <span style={{ background: P.red, color: "#fff", borderRadius: 12, padding: "2px 8px", fontSize: 12, fontWeight: 700 }}>{pendingCount} pending</span>
+          )}
           <span style={S.pill(cfg.color)}>{cfg.label}</span>
           <button onClick={() => setRole(null)} style={{ ...S.btn("ghost"), padding: "6px 10px", fontSize: 12 }}>Logout</button>
         </div>
       </div>
-      {role === "staff" && <StaffView />}
+      {role === "staff"  && <StaffView />}
       {(role === "toyota" || role === "aws") && <SellerView role={role} onRecordChange={refreshPending} />}
-      {role === "admin" && <AdminView onRecordChange={refreshPending} />}
+      {role === "admin"  && <AdminView onRecordChange={refreshPending} />}
     </div>
   );
 }
