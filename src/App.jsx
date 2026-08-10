@@ -29,7 +29,10 @@ const api = {
     return data;
   },
   getLists: async (store) => {
-    const { data } = await supabase.from("daily_lists").select("*").eq("store", store).order("created_at", { ascending: false });
+    const today = new Date().toISOString().split("T")[0];
+    const { data } = await supabase.from("daily_lists").select("*")
+      .eq("store", store).eq("date", today)
+      .order("created_at", { ascending: false });
     return data || [];
   },
   addRecord: async (r) => {
