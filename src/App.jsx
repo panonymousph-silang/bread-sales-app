@@ -30,10 +30,18 @@ const api = {
   },
   getLists: async (store) => {
     const today = new Date().toISOString().split("T")[0];
-    const { data } = await supabase.from("daily_lists").select("*")
+    // Get today's lists
+    const { data: lists } = await supabase.from("daily_lists").select("*")
       .eq("store", store).eq("date", today)
       .order("created_at", { ascending: false });
-    return data || [];
+    if (!lists || lists.length === 0) return [];
+    // Get list IDs that already have a sales record (any status)
+    const listIds = lists.map(l => l.id);
+    const { data: usedRecords } = await supabase.from("sales_records")
+      .select("list_id").in("list_id", listIds);
+    const usedIds = new Set((usedRecords || []).map(r => r.list_id));
+    // Return only lists without a record yet
+    return lists.filter(l => !usedIds.has(l.id));
   },
   addRecord: async (r) => {
     const { data } = await supabase.from("sales_records").insert({
@@ -379,6 +387,7 @@ function SellerView({ role, onRecordChange }) {
   const [startingCash, setStartingCash] = useState("");
   const [expenses, setExpenses] = useState("");
   const [savedId, setSavedId] = useState(null);
+  const [savedTotals, setSavedTotals] = useState({ totalSales: 0, onlineTotal: 0, endingCash: 0 });
   const [submitDone, setSubmitDone] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
   const [myLists, setMyLists] = useState([]);
@@ -444,15 +453,19 @@ function SellerView({ role, onRecordChange }) {
       items, onlinePayments: payments.filter(p => p.ref || p.amount),
       startingCash: Number(startingCash) || 0, expenses: Number(expenses) || 0,
     });
+    // Store the totals directly from current items (don't rely on myRecords reload)
+    setSavedTotals(calcTotals({ store: role, items, onlinePayments: payments, startingCash: Number(startingCash) || 0, expenses: Number(expenses) || 0 }));
     setSavedId(rec.id);
     setSaving(false);
     onRecordChange();
+    loadData(); // reload so Select Today's List updates
   };
 
   const handleSubmit = async () => {
     await api.updateRecord(savedId, { status: "submitted", submittedAt: new Date().toISOString() });
     setSubmitDone(true);
     onRecordChange();
+    loadData(); // reload so list disappears from Select Today's List
   };
 
   const handleDeleteRecord = async (id) => {
@@ -535,14 +548,12 @@ function SellerView({ role, onRecordChange }) {
   );
 
   if (savedId) {
-    const rec = myRecords.find(r => r.id === savedId);
-    const t = rec ? calcTotals(rec) : { totalSales: 0 };
     return (
       <div style={S.sec}>
         <div style={{ ...S.card, marginBottom: 14, textAlign: "center", borderColor: P.green + "44" }}>
           <div style={{ fontSize: 28, marginBottom: 6 }}>✅</div>
           <div style={{ fontWeight: 700, fontSize: 16, color: P.green }}>Record Saved</div>
-          <div style={{ color: P.muted, fontSize: 13, marginTop: 4 }}>Total Sales: <strong style={{ color: P.green }}>{currency(t.totalSales)}</strong></div>
+          <div style={{ color: P.muted, fontSize: 13, marginTop: 4 }}>Total Sales: <strong style={{ color: P.green }}>{currency(savedTotals.totalSales)}</strong></div>
         </div>
         <div style={{ ...S.card, marginBottom: 18, borderColor: P.orange + "44" }}>
           <div style={{ fontWeight: 700, marginBottom: 8, color: P.orange }}>📨 Submit to Admin</div>
