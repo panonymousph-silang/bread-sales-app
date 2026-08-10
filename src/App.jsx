@@ -29,7 +29,10 @@ const api = {
     return data;
   },
   getLists: async (store) => {
-    const today = new Date().toISOString().split("T")[0];
+    // Use Philippines timezone (UTC+8)
+    const now = new Date();
+    const phTime = new Date(now.getTime() + (8 * 60 * 60 * 1000));
+    const today = phTime.toISOString().split("T")[0];
     // Get today's lists
     const { data: lists } = await supabase.from("daily_lists").select("*")
       .eq("store", store).eq("date", today)
@@ -448,17 +451,23 @@ function SellerView({ role, onRecordChange }) {
 
   const handleSave = async () => {
     setSaving(true);
+    // Calculate totals BEFORE the async call, while items state is still current
+    const currentTotals = calcTotals({
+      store: role, items,
+      onlinePayments: payments,
+      startingCash: Number(startingCash) || 0,
+      expenses: Number(expenses) || 0,
+    });
     const rec = await api.addRecord({
       listId: selectedList.id, store: role, date: selectedList.date,
       items, onlinePayments: payments.filter(p => p.ref || p.amount),
       startingCash: Number(startingCash) || 0, expenses: Number(expenses) || 0,
     });
-    // Store the totals directly from current items (don't rely on myRecords reload)
-    setSavedTotals(calcTotals({ store: role, items, onlinePayments: payments, startingCash: Number(startingCash) || 0, expenses: Number(expenses) || 0 }));
+    setSavedTotals(currentTotals);
     setSavedId(rec.id);
     setSaving(false);
     onRecordChange();
-    loadData(); // reload so Select Today's List updates
+    loadData();
   };
 
   const handleSubmit = async () => {
