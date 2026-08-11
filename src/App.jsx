@@ -33,25 +33,22 @@ const api = {
     const now = new Date();
     const phTime = new Date(now.getTime() + (8 * 60 * 60 * 1000));
     const today = phTime.toISOString().split("T")[0];
-    // Get today's lists
+    // Get today's lists that are NOT yet used (no sales record, even deleted ones)
+    // We track used lists by checking the list's "used" flag
     const { data: lists } = await supabase.from("daily_lists").select("*")
-      .eq("store", store).eq("date", today)
+      .eq("store", store).eq("date", today).eq("used", false)
       .order("created_at", { ascending: false });
-    if (!lists || lists.length === 0) return [];
-    // Get list IDs that already have a sales record (any status)
-    const listIds = lists.map(l => l.id);
-    const { data: usedRecords } = await supabase.from("sales_records")
-      .select("list_id").in("list_id", listIds);
-    const usedIds = new Set((usedRecords || []).map(r => r.list_id));
-    // Return only lists without a record yet
-    return lists.filter(l => !usedIds.has(l.id));
+    return lists || [];
   },
   addRecord: async (r) => {
-    const { data } = await supabase.from("sales_records").insert({
+    const { data, error } = await supabase.from("sales_records").insert({
       list_id: r.listId, store: r.store, date: r.date,
       items: r.items, online_payments: r.onlinePayments,
       starting_cash: r.startingCash, expenses: r.expenses, status: "draft",
     }).select().single();
+    if (error) { console.error("addRecord error:", error); throw error; }
+    // Mark the list as used so it won't reappear even if record is deleted
+    await supabase.from("daily_lists").update({ used: true }).eq("id", r.listId);
     return data;
   },
   updateRecord: async (id, patch) => {
@@ -449,25 +446,32 @@ function SellerView({ role, onRecordChange }) {
   const updPayment = (i, f, v) => setPayments(p => p.map((x, j) => j === i ? { ...x, [f]: v } : x));
   const removePayment = (i) => setPayments(p => p.filter((_, j) => j !== i));
 
+  const [saveError, setSaveError] = useState("");
+
   const handleSave = async () => {
     setSaving(true);
-    // Calculate totals BEFORE the async call, while items state is still current
+    setSaveError("");
     const currentTotals = calcTotals({
       store: role, items,
       onlinePayments: payments,
       startingCash: Number(startingCash) || 0,
       expenses: Number(expenses) || 0,
     });
-    const rec = await api.addRecord({
-      listId: selectedList.id, store: role, date: selectedList.date,
-      items, onlinePayments: payments.filter(p => p.ref || p.amount),
-      startingCash: Number(startingCash) || 0, expenses: Number(expenses) || 0,
-    });
-    setSavedTotals(currentTotals);
-    setSavedId(rec.id);
-    setSaving(false);
-    onRecordChange();
-    loadData();
+    try {
+      const rec = await api.addRecord({
+        listId: selectedList.id, store: role, date: selectedList.date,
+        items, onlinePayments: payments.filter(p => p.ref || p.amount),
+        startingCash: Number(startingCash) || 0, expenses: Number(expenses) || 0,
+      });
+      setSavedTotals(currentTotals);
+      setSavedId(rec.id);
+      onRecordChange();
+      loadData();
+    } catch (err) {
+      setSaveError("Save failed: " + (err.message || JSON.stringify(err)));
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleSubmit = async () => {
@@ -694,7 +698,8 @@ function SellerView({ role, onRecordChange }) {
         ))}
         <button onClick={addPayment} style={{...S.btn("ghost"),fontSize:13}}>+ Add Payment</button>
       </div>
-      <div style={{ display: "flex", justifyContent: "flex-end" }}>
+      <div style={{ display: "flex", justifyContent: "flex-end", flexDirection: "column", alignItems: "flex-end", gap: 8 }}>
+        {saveError && <div style={{ color: P.red, fontSize: 12, textAlign: "right" }}>{saveError}</div>}
         <button onClick={handleSave} disabled={saving} style={{ ...S.btn(), opacity: saving ? 0.6 : 1 }}>
           {saving ? "Saving..." : "Save Record ✓"}
         </button>
