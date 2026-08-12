@@ -58,6 +58,17 @@ const api = {
     if (patch.confirmedAt !== undefined) mapped.confirmed_at = patch.confirmedAt;
     await supabase.from("sales_records").update(mapped).eq("id", id);
   },
+  autoSaveRecord: async (id, items, onlinePayments, startingCash, expenses) => {
+    await supabase.from("sales_records").update({
+      items, online_payments: onlinePayments,
+      starting_cash: startingCash, expenses,
+    }).eq("id", id);
+  },
+  getDraftRecord: async (store) => {
+    const { data } = await supabase.from("sales_records").select("*, daily_lists(*)").eq("store", store).eq("status", "draft").order("created_at", { ascending: false }).limit(1).single();
+    if (!data) return null;
+    return { ...mapRecord(data), list: data.daily_lists };
+  },
   deleteRecord: async (id) => {
     await supabase.from("sales_records").delete().eq("id", id);
   },
@@ -386,7 +397,7 @@ function SellerView({ role, onRecordChange }) {
   const [payments, setPayments] = useState([{ ref: "", amount: "" }]);
   const [startingCash, setStartingCash] = useState("");
   const [expenses, setExpenses] = useState("");
-  const [savedId, setSavedId] = useState(null);
+  const [draftId, setDraftId] = useState(null); // ID of in-progress record
   const [savedTotals, setSavedTotals] = useState({ totalSales: 0, onlineTotal: 0, endingCash: 0 });
   const [submitDone, setSubmitDone] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
@@ -394,6 +405,8 @@ function SellerView({ role, onRecordChange }) {
   const [myRecords, setMyRecords] = useState([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [autoSaveStatus, setAutoSaveStatus] = useState(""); // "saving"|"saved"|""
+  const autoSaveTimer = { current: null };
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -407,24 +420,73 @@ function SellerView({ role, onRecordChange }) {
     setLoading(false);
   }, [role]);
 
-  useEffect(() => { loadData(); }, [loadData]);
+  // On mount: check if there's an existing draft to resume
+  useEffect(() => {
+    loadData();
+    api.getDraftRecord(role).then(draft => {
+      if (draft && draft.list) {
+        // Resume from draft
+        setSelectedList(draft.list);
+        setItems(draft.items || []);
+        setPayments(draft.onlinePayments?.length ? draft.onlinePayments : [{ ref: "", amount: "" }]);
+        setStartingCash(String(draft.startingCash || ""));
+        setExpenses(String(draft.expenses || ""));
+        setDraftId(draft.id);
+        setStep("sales");
+        setView("entry");
+      }
+    }).catch(() => {});
+  }, [role]);
+
+  // Auto-save whenever items/payments/cash changes (debounced 1.5s)
+  useEffect(() => {
+    if (!draftId || !items.length) return;
+    setAutoSaveStatus("saving");
+    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+    autoSaveTimer.current = setTimeout(async () => {
+      await api.autoSaveRecord(
+        draftId, items,
+        payments.filter(p => p.ref || p.amount),
+        Number(startingCash) || 0,
+        Number(expenses) || 0
+      );
+      setAutoSaveStatus("saved");
+      setTimeout(() => setAutoSaveStatus(""), 2000);
+    }, 1500);
+    return () => { if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current); };
+  }, [items, payments, startingCash, expenses, draftId]);
 
   const resetAll = () => {
     setView("menu"); setSelectedList(null); setStep("selectList");
     setItems([]); setPayments([{ ref: "", amount: "" }]);
     setStartingCash(""); setExpenses("");
-    setSavedId(null); setSubmitDone(false); setConfirmDeleteId(null);
+    setDraftId(null); setSubmitDone(false); setConfirmDeleteId(null);
+    setAutoSaveStatus("");
     setStock50Items(allProds.map(p => ({ ...p, stock50: 0 })));
     loadData();
   };
 
-  const selectList = (list) => {
+  const selectList = async (list) => {
     setSelectedList(list);
-    if (isToyota) { setStep("stock50"); }
-    else { setItems(list.items.map(i => ({ ...i, soldFull: 0 }))); setStep("sales"); }
+    if (isToyota) {
+      setStep("stock50");
+    } else {
+      const initItems = list.items.map(i => ({ ...i, soldFull: 0 }));
+      setItems(initItems);
+      // Create draft record immediately
+      try {
+        const rec = await api.addRecord({
+          listId: list.id, store: role, date: list.date,
+          items: initItems, onlinePayments: [],
+          startingCash: 0, expenses: 0,
+        });
+        setDraftId(rec.id);
+      } catch(e) { console.error("Draft create error:", e); }
+      setStep("sales");
+    }
   };
 
-  const goToSalesFromStock50 = () => {
+  const goToSalesFromStock50 = async () => {
     const merged = selectedList.items.map(i => ({
       ...i, soldFull: 0, sold5: 0, sold50: 0,
       stock50: stock50Items.find(s => s.name === i.name)?.stock50 || 0,
@@ -435,6 +497,15 @@ function SellerView({ role, onRecordChange }) {
       }
     });
     setItems(merged);
+    // Create draft record immediately
+    try {
+      const rec = await api.addRecord({
+        listId: selectedList.id, store: role, date: selectedList.date,
+        items: merged, onlinePayments: [],
+        startingCash: 0, expenses: 0,
+      });
+      setDraftId(rec.id);
+    } catch(e) { console.error("Draft create error:", e); }
     setStep("sales");
   };
 
@@ -446,39 +517,33 @@ function SellerView({ role, onRecordChange }) {
   const updPayment = (i, f, v) => setPayments(p => p.map((x, j) => j === i ? { ...x, [f]: v } : x));
   const removePayment = (i) => setPayments(p => p.filter((_, j) => j !== i));
 
-  const [saveError, setSaveError] = useState("");
-
   const handleSave = async () => {
+    if (!draftId) return;
     setSaving(true);
-    setSaveError("");
     const currentTotals = calcTotals({
-      store: role, items,
-      onlinePayments: payments,
+      store: role, items, onlinePayments: payments,
       startingCash: Number(startingCash) || 0,
       expenses: Number(expenses) || 0,
     });
-    try {
-      const rec = await api.addRecord({
-        listId: selectedList.id, store: role, date: selectedList.date,
-        items, onlinePayments: payments.filter(p => p.ref || p.amount),
-        startingCash: Number(startingCash) || 0, expenses: Number(expenses) || 0,
-      });
-      setSavedTotals(currentTotals);
-      setSavedId(rec.id);
-      onRecordChange();
-      loadData();
-    } catch (err) {
-      setSaveError("Save failed: " + (err.message || JSON.stringify(err)));
-    } finally {
-      setSaving(false);
-    }
+    // Final save of all data
+    await api.autoSaveRecord(
+      draftId, items,
+      payments.filter(p => p.ref || p.amount),
+      Number(startingCash) || 0,
+      Number(expenses) || 0
+    );
+    setSavedTotals(currentTotals);
+    setSaving(false);
+    onRecordChange();
+    loadData();
   };
 
   const handleSubmit = async () => {
-    await api.updateRecord(savedId, { status: "submitted", submittedAt: new Date().toISOString() });
+    await handleSave(); // ensure latest data saved
+    await api.updateRecord(draftId, { status: "submitted", submittedAt: new Date().toISOString() });
     setSubmitDone(true);
     onRecordChange();
-    loadData(); // reload so list disappears from Select Today's List
+    loadData();
   };
 
   const handleDeleteRecord = async (id) => {
@@ -499,10 +564,20 @@ function SellerView({ role, onRecordChange }) {
         <span style={S.pill(storeColor)}>{STORES[role]}</span>
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-        <div onClick={() => { setView("entry"); setStep("selectList"); }} style={{ ...S.card, border: `1px solid ${P.accent}44`, cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div><div style={{ fontWeight: 700, color: P.accent }}>📝 New Sales Record</div><div style={{ fontSize: 12, color: P.muted, marginTop: 2 }}>Enter today's sales</div></div>
-          <span style={{ color: P.accent, fontSize: 20 }}>→</span>
-        </div>
+        {draftId ? (
+          <div onClick={() => setView("entry")} style={{ ...S.card, border: `2px solid ${P.orange}`, cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div>
+              <div style={{ fontWeight: 700, color: P.orange }}>▶ Resume In-Progress Record</div>
+              <div style={{ fontSize: 12, color: P.muted, marginTop: 2 }}>You have unsaved sales — tap to continue</div>
+            </div>
+            <span style={{ color: P.orange, fontSize: 20 }}>→</span>
+          </div>
+        ) : (
+          <div onClick={() => { setView("entry"); setStep("selectList"); }} style={{ ...S.card, border: `1px solid ${P.accent}44`, cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div><div style={{ fontWeight: 700, color: P.accent }}>📝 New Sales Record</div><div style={{ fontSize: 12, color: P.muted, marginTop: 2 }}>Enter today's sales</div></div>
+            <span style={{ color: P.accent, fontSize: 20 }}>→</span>
+          </div>
+        )}
         <div onClick={() => setView("history")} style={{ ...S.card, cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div><div style={{ fontWeight: 700 }}>📂 My Records</div><div style={{ fontSize: 12, color: P.muted, marginTop: 2 }}>{myRecords.length} records</div></div>
           <span style={{ color: P.muted, fontSize: 20 }}>→</span>
@@ -560,23 +635,7 @@ function SellerView({ role, onRecordChange }) {
     </div>
   );
 
-  if (savedId) {
-    return (
-      <div style={S.sec}>
-        <div style={{ ...S.card, marginBottom: 14, textAlign: "center", borderColor: P.green + "44" }}>
-          <div style={{ fontSize: 28, marginBottom: 6 }}>✅</div>
-          <div style={{ fontWeight: 700, fontSize: 16, color: P.green }}>Record Saved</div>
-          <div style={{ color: P.muted, fontSize: 13, marginTop: 4 }}>Total Sales: <strong style={{ color: P.green }}>{currency(savedTotals.totalSales)}</strong></div>
-        </div>
-        <div style={{ ...S.card, marginBottom: 18, borderColor: P.orange + "44" }}>
-          <div style={{ fontWeight: 700, marginBottom: 8, color: P.orange }}>📨 Submit to Admin</div>
-          <div style={{ fontSize: 13, color: P.muted, marginBottom: 14 }}>When you're done for the day, submit this record for review.</div>
-          <button onClick={handleSubmit} style={{ ...S.btn("primary"), width: "100%", fontSize: 15, padding: "13px" }}>Submit to Admin →</button>
-        </div>
-        <button onClick={resetAll} style={{ ...S.btn("ghost"), width: "100%" }}>Back to Menu</button>
-      </div>
-    );
-  }
+
 
   if (view === "entry" && step === "selectList") return (
     <div style={S.sec}>
@@ -698,11 +757,35 @@ function SellerView({ role, onRecordChange }) {
         ))}
         <button onClick={addPayment} style={{...S.btn("ghost"),fontSize:13}}>+ Add Payment</button>
       </div>
-      <div style={{ display: "flex", justifyContent: "flex-end", flexDirection: "column", alignItems: "flex-end", gap: 8 }}>
-        {saveError && <div style={{ color: P.red, fontSize: 12, textAlign: "right" }}>{saveError}</div>}
-        <button onClick={handleSave} disabled={saving} style={{ ...S.btn(), opacity: saving ? 0.6 : 1 }}>
-          {saving ? "Saving..." : "Save Record ✓"}
-        </button>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {/* Auto-save status */}
+        <div style={{ textAlign: "right", fontSize: 11, color: autoSaveStatus === "saved" ? P.green : P.muted, minHeight: 16 }}>
+          {autoSaveStatus === "saving" && "⏳ Auto-saving..."}
+          {autoSaveStatus === "saved" && "✓ Auto-saved"}
+          {!autoSaveStatus && draftId && "✓ Progress saved"}
+        </div>
+        {/* Submit to Admin button (shown when draft exists) */}
+        {draftId && (
+          <div style={{ ...S.card, borderColor: P.orange + "44" }}>
+            <div style={{ fontWeight: 700, marginBottom: 6, color: P.orange, fontSize: 13 }}>📨 Done for the day?</div>
+            <div style={{ fontSize: 12, color: P.muted, marginBottom: 10 }}>Save your final record and submit to admin for review.</div>
+            <div style={{ display: "flex", gap: 10 }}>
+              <button onClick={handleSave} disabled={saving} style={{ ...S.btn("ghost"), flex: 1, opacity: saving ? 0.6 : 1 }}>
+                {saving ? "Saving..." : "💾 Save Only"}
+              </button>
+              <button onClick={handleSubmit} disabled={saving} style={{ ...S.btn(), flex: 2, opacity: saving ? 0.6 : 1 }}>
+                {saving ? "Saving..." : "Submit to Admin →"}
+              </button>
+            </div>
+          </div>
+        )}
+        {!draftId && (
+          <div style={{ display: "flex", justifyContent: "flex-end" }}>
+            <button onClick={handleSave} disabled={saving} style={{ ...S.btn(), opacity: saving ? 0.6 : 1 }}>
+              {saving ? "Saving..." : "Save Record ✓"}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
