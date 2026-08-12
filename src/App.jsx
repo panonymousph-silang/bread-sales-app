@@ -45,9 +45,9 @@ const api = {
       list_id: r.listId, store: r.store, date: r.date,
       items: r.items, online_payments: r.onlinePayments,
       starting_cash: r.startingCash, expenses: r.expenses, status: "draft",
+      recorder_name: r.recorderName || null,
     }).select().single();
     if (error) { console.error("addRecord error:", error); throw error; }
-    // Mark the list as used so it won't reappear even if record is deleted
     await supabase.from("daily_lists").update({ used: true }).eq("id", r.listId);
     return data;
   },
@@ -58,10 +58,11 @@ const api = {
     if (patch.confirmedAt !== undefined) mapped.confirmed_at = patch.confirmedAt;
     await supabase.from("sales_records").update(mapped).eq("id", id);
   },
-  autoSaveRecord: async (id, items, onlinePayments, startingCash, expenses) => {
+  autoSaveRecord: async (id, items, onlinePayments, startingCash, expenses, recorderName) => {
     await supabase.from("sales_records").update({
       items, online_payments: onlinePayments,
       starting_cash: startingCash, expenses,
+      recorder_name: recorderName || null,
     }).eq("id", id);
   },
   getDraftRecord: async (store) => {
@@ -90,11 +91,24 @@ const api = {
     const { count } = await supabase.from("sales_records").select("*", { count: "exact", head: true }).eq("status", "submitted");
     return count || 0;
   },
+  // Staff
+  getStaff: async (store) => {
+    const { data } = await supabase.from("staff").select("*").eq("store", store).order("name");
+    return data || [];
+  },
+  addStaff: async (name, store) => {
+    const { data } = await supabase.from("staff").insert({ name, store }).select().single();
+    return data;
+  },
+  deleteStaff: async (id) => {
+    await supabase.from("staff").delete().eq("id", id);
+  },
 };
 
 const mapRecord = (r) => ({
   ...r, listId: r.list_id, onlinePayments: r.online_payments || [],
   startingCash: r.starting_cash, submittedAt: r.submitted_at, confirmedAt: r.confirmed_at,
+  recorderName: r.recorder_name,
 });
 
 // ── Calc helpers ──────────────────────────────────────────────────────────────
@@ -397,25 +411,28 @@ function SellerView({ role, onRecordChange }) {
   const [payments, setPayments] = useState([{ ref: "", amount: "" }]);
   const [startingCash, setStartingCash] = useState("");
   const [expenses, setExpenses] = useState("");
-  const [draftId, setDraftId] = useState(null); // ID of in-progress record
+  const [draftId, setDraftId] = useState(null);
   const [savedTotals, setSavedTotals] = useState({ totalSales: 0, onlineTotal: 0, endingCash: 0 });
   const [submitDone, setSubmitDone] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
   const [myLists, setMyLists] = useState([]);
   const [myRecords, setMyRecords] = useState([]);
+  const [staffList, setStaffList] = useState([]);
+  const [recorderName, setRecorderName] = useState("");
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [autoSaveStatus, setAutoSaveStatus] = useState(""); // "saving"|"saved"|""
+  const [autoSaveStatus, setAutoSaveStatus] = useState("");
   const autoSaveTimer = { current: null };
 
   const loadData = useCallback(async () => {
     setLoading(true);
-    const [lists, records, prods] = await Promise.all([
-      api.getLists(role), api.getRecordsByStore(role), api.getProducts()
+    const [lists, records, prods, staff] = await Promise.all([
+      api.getLists(role), api.getRecordsByStore(role), api.getProducts(), api.getStaff(role)
     ]);
     setMyLists(lists);
     setMyRecords(records);
     setAllProds(prods);
+    setStaffList(staff);
     setStock50Items(prods.map(p => ({ ...p, stock50: 0 })));
     setLoading(false);
   }, [role]);
@@ -448,20 +465,21 @@ function SellerView({ role, onRecordChange }) {
         draftId, items,
         payments.filter(p => p.ref || p.amount),
         Number(startingCash) || 0,
-        Number(expenses) || 0
+        Number(expenses) || 0,
+        recorderName
       );
       setAutoSaveStatus("saved");
       setTimeout(() => setAutoSaveStatus(""), 2000);
     }, 1500);
     return () => { if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current); };
-  }, [items, payments, startingCash, expenses, draftId]);
+  }, [items, payments, startingCash, expenses, draftId, recorderName]);
 
   const resetAll = () => {
     setView("menu"); setSelectedList(null); setStep("selectList");
     setItems([]); setPayments([{ ref: "", amount: "" }]);
     setStartingCash(""); setExpenses("");
     setDraftId(null); setSubmitDone(false); setConfirmDeleteId(null);
-    setAutoSaveStatus("");
+    setAutoSaveStatus(""); setRecorderName("");
     setStock50Items(allProds.map(p => ({ ...p, stock50: 0 })));
     loadData();
   };
@@ -525,12 +543,12 @@ function SellerView({ role, onRecordChange }) {
       startingCash: Number(startingCash) || 0,
       expenses: Number(expenses) || 0,
     });
-    // Final save of all data
     await api.autoSaveRecord(
       draftId, items,
       payments.filter(p => p.ref || p.amount),
       Number(startingCash) || 0,
-      Number(expenses) || 0
+      Number(expenses) || 0,
+      recorderName
     );
     setSavedTotals(currentTotals);
     setSaving(false);
@@ -603,7 +621,9 @@ function SellerView({ role, onRecordChange }) {
                 <span style={{ fontWeight: 700 }}>{fmtDate(r.date)}</span>
                 <StatusBadge status={r.status} />
               </div>
-              <div style={{ fontSize: 13, color: P.muted }}>Total: <span style={{ color: P.green, fontWeight: 600 }}>{currency(t.totalSales)}</span></div>
+              {r.recorderName && <div style={{ fontSize: 12, color: P.muted, marginBottom: 2 }}>👤 {r.recorderName}</div>}
+              <div style={{ fontSize: 13, color: P.muted }}>Total Sales: <span style={{ color: P.green, fontWeight: 600 }}>{currency(t.totalSales)}</span></div>
+              <div style={{ fontSize: 13, color: P.muted }}>Ending Cash: <span style={{ color: P.accent, fontWeight: 600 }}>{currency(t.endingCash)}</span></div>
               {r.submittedAt && <div style={{ fontSize: 11, color: P.muted, marginTop: 2 }}>Submitted {fmtTime(r.submittedAt)}</div>}
               {r.confirmedAt && <div style={{ fontSize: 11, color: P.green, marginTop: 2 }}>✓ Confirmed {fmtTime(r.confirmedAt)}</div>}
               {r.status === "submitted" && <div style={{ fontSize: 11, color: P.muted, marginTop: 6, fontStyle: "italic" }}>Cannot delete — pending admin review.</div>}
@@ -733,6 +753,15 @@ function SellerView({ role, onRecordChange }) {
           </tbody>
         </table>
       </div>
+      {/* Recorder name */}
+      <div style={{ ...S.card, margin: "14px 0 10px" }}>
+        <div style={{ fontWeight: 700, marginBottom: 10, color: P.accent }}>👤 Recorder</div>
+        <select value={recorderName} onChange={e => setRecorderName(e.target.value)} style={S.inp}>
+          <option value="">-- Select your name --</option>
+          {staffList.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+        </select>
+      </div>
+
       <div style={{ ...S.card, margin: "14px 0" }}>
         <div style={{ fontWeight: 700, marginBottom: 10, color: P.accent }}>💰 Cash Summary</div>
         <div style={S.row}>
@@ -804,6 +833,31 @@ function AdminView({ onRecordChange }) {
   const [submitted, setSubmitted] = useState([]);
   const [records, setRecords] = useState([]);
   const [loading, setLoading] = useState(false);
+  // Staff management
+  const [allStaff, setAllStaff] = useState([]);
+  const [newStaffName, setNewStaffName] = useState("");
+  const [newStaffStore, setNewStaffStore] = useState("toyota");
+  const [confirmDeleteStaffId, setConfirmDeleteStaffId] = useState(null);
+
+  const loadStaff = useCallback(async () => {
+    const [t, a] = await Promise.all([api.getStaff("toyota"), api.getStaff("aws")]);
+    setAllStaff([...t, ...a]);
+  }, []);
+
+  useEffect(() => { loadStaff(); }, [loadStaff]);
+
+  const handleAddStaff = async () => {
+    if (!newStaffName.trim()) return;
+    await api.addStaff(newStaffName.trim(), newStaffStore);
+    setNewStaffName("");
+    loadStaff();
+  };
+
+  const handleDeleteStaff = async (id) => {
+    await api.deleteStaff(id);
+    setConfirmDeleteStaffId(null);
+    loadStaff();
+  };
 
   const loadInbox = useCallback(async () => {
     setLoading(true);
@@ -871,6 +925,7 @@ function AdminView({ onRecordChange }) {
           </div>
           <span style={{ color: P.green, fontWeight: 700 }}>{currency(t.totalSales)}</span>
         </div>
+        {r.recorderName&&<div style={{fontSize:12,color:P.muted,marginBottom:4}}>👤 {r.recorderName}</div>}
         {r.submittedAt&&<div style={{fontSize:11,color:P.muted,marginBottom:6}}>Submitted: {fmtTime(r.submittedAt)}</div>}
         {r.confirmedAt&&<div style={{fontSize:11,color:P.green,marginBottom:6}}>✓ Confirmed {fmtTime(r.confirmedAt)}</div>}
         <div style={S.tw}>
@@ -906,7 +961,7 @@ function AdminView({ onRecordChange }) {
           </table>
         </div>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 10, flexWrap: "wrap", gap: 8 }}>
-          <div style={{ fontSize: 12, color: P.muted }}>Cash: {currency(r.startingCash)} → {currency(t.endingCash)} | Online: {currency(t.onlineTotal)}</div>
+          <div style={{ fontSize: 12, color: P.muted }}>Start: {currency(r.startingCash)} | End: <span style={{color: P.accent, fontWeight: 600}}>{currency(t.endingCash)}</span> | Online: {currency(t.onlineTotal)}</div>
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
             {showConfirm && <button onClick={()=>confirmRecord(r.id)} style={{...S.btn("success"),padding:"7px 16px",fontSize:13}}>✓ Confirm</button>}
             {confirmDeleteId===r.id
@@ -926,6 +981,7 @@ function AdminView({ onRecordChange }) {
   const tabs = [
     { id: "inbox", label: "📨 Inbox", badge: submitted.length },
     { id: "records", label: "📊 Records" },
+    { id: "staff", label: "👥 Staff" },
   ];
 
   return (
@@ -966,6 +1022,47 @@ function AdminView({ onRecordChange }) {
           }
           {filteredRecords.length>0&&<div style={{marginTop:14,display:"flex",justifyContent:"flex-end"}}><button onClick={exportCSV} style={S.btn()}>⬇ Export CSV ({months[viewMonth-1]} {viewYear})</button></div>}
         </>
+      )}
+      {tab === "staff" && (
+        <div>
+          <p style={{ color: P.muted, fontSize: 13, marginTop: 0 }}>Manage staff for each store. Changes apply to the recorder dropdown immediately.</p>
+          <div style={{ ...S.card, marginBottom: 16 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10, color: P.accent }}>+ Add New Staff</div>
+            <div style={S.row}>
+              <div style={{ flex: 2 }}><input placeholder="Name" value={newStaffName} onChange={e => setNewStaffName(e.target.value)} style={S.inp} /></div>
+              <div style={{ flex: 1 }}>
+                <select value={newStaffStore} onChange={e => setNewStaffStore(e.target.value)} style={S.inp}>
+                  <option value="toyota">Toyota</option>
+                  <option value="aws">AWS</option>
+                </select>
+              </div>
+              <button onClick={handleAddStaff} style={S.btn()}>Add</button>
+            </div>
+          </div>
+          {["toyota","aws"].map(store => (
+            <div key={store} style={{ marginBottom: 20 }}>
+              <div style={{ fontWeight: 700, marginBottom: 8, color: store === "toyota" ? P.toyota : P.aws, fontSize: 14 }}>
+                {STORES[store]}
+              </div>
+              {allStaff.filter(s => s.store === store).map(s => (
+                <div key={s.id} style={{ ...S.card, marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span style={{ fontSize: 14, fontWeight: 500 }}>{s.name}</span>
+                  {confirmDeleteStaffId === s.id
+                    ? <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                        <span style={{ fontSize: 12, color: P.red }}>Remove?</span>
+                        <button onClick={() => handleDeleteStaff(s.id)} style={{ ...S.btn("danger"), padding: "5px 10px", fontSize: 12 }}>Yes</button>
+                        <button onClick={() => setConfirmDeleteStaffId(null)} style={{ ...S.btn("ghost"), padding: "5px 10px", fontSize: 12 }}>No</button>
+                      </div>
+                    : <button onClick={() => setConfirmDeleteStaffId(s.id)} style={{ background: "none", border: `1px solid ${P.red}44`, borderRadius: 7, color: P.red, padding: "5px 10px", fontSize: 11, cursor: "pointer" }}>🗑 Remove</button>
+                  }
+                </div>
+              ))}
+              {allStaff.filter(s => s.store === store).length === 0 && (
+                <div style={{ color: P.muted, fontSize: 13, padding: "10px 0" }}>No staff added yet.</div>
+              )}
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );
