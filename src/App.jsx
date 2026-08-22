@@ -66,8 +66,19 @@ const api = {
     }).eq("id", id);
   },
   getDraftRecord: async (store) => {
-    const { data } = await supabase.from("sales_records").select("*, daily_lists(*)").eq("store", store).eq("status", "draft").order("created_at", { ascending: false }).limit(1).single();
-    if (!data) return null;
+    const { data, error } = await supabase.from("sales_records")
+      .select("*, daily_lists(*)")
+      .eq("store", store)
+      .eq("status", "draft")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error || !data) return null;
+    // Only resume if the list date is today (PH time)
+    const now = new Date();
+    const phTime = new Date(now.getTime() + (8 * 60 * 60 * 1000));
+    const today = phTime.toISOString().split("T")[0];
+    if (data.date !== today) return null;
     return { ...mapRecord(data), list: data.daily_lists };
   },
   deleteRecord: async (id) => {
@@ -463,25 +474,18 @@ function SellerView({ role, onRecordChange }) {
     }).catch(() => {});
   }, [role]);
 
-  // Manual save triggered by user interaction (debounced 3s, only after first user action)
+  // Save on demand only - no auto-save timer to avoid overwriting with stale data
   const [hasUserEdited, setHasUserEdited] = useState(false);
-  useEffect(() => {
-    if (!draftId || !items.length || !hasUserEdited) return;
-    setAutoSaveStatus("saving");
-    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
-    autoSaveTimer.current = setTimeout(async () => {
-      await api.autoSaveRecord(
-        draftId, items,
-        payments.filter(p => p.ref || p.amount),
-        Number(startingCash) || 0,
-        Number(expenses) || 0,
-        recorderName
-      );
-      setAutoSaveStatus("saved");
-      setTimeout(() => setAutoSaveStatus(""), 2000);
-    }, 3000);
-    return () => { if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current); };
-  }, [items, payments, startingCash, expenses, draftId, recorderName, hasUserEdited]);
+  const saveNow = useCallback(async (currentItems, currentPayments, currentCash, currentExpenses, currentName, id) => {
+    if (!id) return;
+    await api.autoSaveRecord(
+      id, currentItems,
+      currentPayments.filter(p => p.ref || p.amount),
+      Number(currentCash) || 0,
+      Number(currentExpenses) || 0,
+      currentName
+    );
+  }, []);
 
   const resetAll = () => {
     setView("menu"); setSelectedList(null); setStep("selectList");
@@ -558,13 +562,7 @@ function SellerView({ role, onRecordChange }) {
       startingCash: Number(startingCash) || 0,
       expenses: Number(expenses) || 0,
     });
-    await api.autoSaveRecord(
-      draftId, items,
-      payments.filter(p => p.ref || p.amount),
-      Number(startingCash) || 0,
-      Number(expenses) || 0,
-      recorderName
-    );
+    await saveNow(items, payments, startingCash, expenses, recorderName, draftId);
     setSavedTotals(currentTotals);
     setSaving(false);
     onRecordChange();
@@ -574,18 +572,9 @@ function SellerView({ role, onRecordChange }) {
   const handleSubmit = async () => {
     if (!draftId) return;
     setSaving(true);
-    // Cancel any pending auto-save timer
-    if (autoSaveTimer.current) { clearTimeout(autoSaveTimer.current); autoSaveTimer.current = null; }
-    // Do a final definitive save with current state values
-    await api.autoSaveRecord(
-      draftId,
-      items,
-      payments.filter(p => p.ref || p.amount),
-      Number(startingCash) || 0,
-      Number(expenses) || 0,
-      recorderName
-    );
-    // Now submit
+    // Final save with current React state values
+    await saveNow(items, payments, startingCash, expenses, recorderName, draftId);
+    // Then submit
     await api.updateRecord(draftId, { status: "submitted", submittedAt: new Date().toISOString() });
     setSaving(false);
     setSubmitDone(true);
@@ -738,7 +727,7 @@ function SellerView({ role, onRecordChange }) {
           <thead><tr>
             <th style={{ ...S.th, textAlign: "left" }}>Item</th>
             <th style={S.th}>Today's Stock</th>
-            <th style={{ ...S.th, color: P.red }}>50% Stock{dayOffMode ? " (L/O + Today)" : " (L/O)"}</th>
+            <th style={{ ...S.th, color: P.red }}>50% Stock (L/O)</th>
           </tr></thead>
           <tbody>
             {allProds.map((prod, i) => {
@@ -846,11 +835,9 @@ function SellerView({ role, onRecordChange }) {
         <button onClick={addPayment} style={{...S.btn("ghost"),fontSize:13}}>+ Add Payment</button>
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-        {/* Auto-save status */}
-        <div style={{ textAlign: "right", fontSize: 11, color: autoSaveStatus === "saved" ? P.green : P.muted, minHeight: 16 }}>
-          {autoSaveStatus === "saving" && "⏳ Auto-saving..."}
-          {autoSaveStatus === "saved" && "✓ Auto-saved"}
-          {!autoSaveStatus && draftId && "✓ Progress saved"}
+        {/* Save status */}
+        <div style={{ textAlign: "right", fontSize: 11, color: P.muted, minHeight: 16 }}>
+          {draftId && "💡 Press Submit when done for the day"}
         </div>
         {/* Submit to Admin button (shown when draft exists) */}
         {draftId && (
