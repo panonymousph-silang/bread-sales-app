@@ -548,26 +548,28 @@ function SellerView({ role, onRecordChange }) {
   const removePayment = (i) => setPayments(p => p.filter((_, j) => j !== i));
 
   const handleSave = async () => {
-    if (!draftId) return;
+    if (!selectedList) return;
     setSaving(true);
-    const snapItems = items;
-    const snapPayments = payments;
+    const snapItems = [...items];
+    const snapPayments = [...payments];
     const snapCash = startingCash;
     const snapExpenses = expenses;
     const snapName = recorderName;
-    const snapId = draftId;
     const currentTotals = calcTotals({
       store: role, items: snapItems, onlinePayments: snapPayments,
       startingCash: Number(snapCash) || 0,
       expenses: Number(snapExpenses) || 0,
     });
-    await api.autoSaveRecord(
-      snapId, snapItems,
-      snapPayments.filter(p => p.ref || p.amount),
-      Number(snapCash) || 0,
-      Number(snapExpenses) || 0,
-      snapName
-    );
+    if (draftId) {
+      // Update existing draft
+      await supabase.from("sales_records").update({
+        items: snapItems,
+        online_payments: snapPayments.filter(p => p.ref || p.amount),
+        starting_cash: Number(snapCash) || 0,
+        expenses: Number(snapExpenses) || 0,
+        recorder_name: snapName || null,
+      }).eq("id", draftId);
+    }
     setSavedTotals(currentTotals);
     setSaving(false);
     onRecordChange();
@@ -575,28 +577,42 @@ function SellerView({ role, onRecordChange }) {
   };
 
   const handleSubmit = async () => {
-    if (!draftId) return;
+    if (!selectedList) return;
     setSaving(true);
-    // Snapshot current state values before any async operations
-    const snapItems = items;
-    const snapPayments = payments;
+    // Snapshot ALL current state immediately
+    const snapItems = [...items];
+    const snapPayments = [...payments];
     const snapCash = startingCash;
     const snapExpenses = expenses;
     const snapName = recorderName;
-    const snapId = draftId;
-    // Save with snapshotted values
-    await api.autoSaveRecord(
-      snapId, snapItems,
-      snapPayments.filter(p => p.ref || p.amount),
-      Number(snapCash) || 0,
-      Number(snapExpenses) || 0,
-      snapName
-    );
-    // Then submit - use PH time (UTC+8)
+    const snapListId = selectedList.id;
+    const snapDate = selectedList.date;
     const phNow = new Date(Date.now() + 8 * 60 * 60 * 1000);
     const phIso = phNow.toISOString().replace("Z", "+08:00");
-    await api.updateRecord(snapId, { status: "submitted", submittedAt: phIso });
-    setDraftId(null); // clear draft so resume won't re-open this record
+    // Delete old draft if exists
+    if (draftId) {
+      await supabase.from("sales_records").delete().eq("id", draftId);
+    }
+    // Insert fresh submitted record with current values
+    const { data, error } = await supabase.from("sales_records").insert({
+      list_id: snapListId,
+      store: role,
+      date: snapDate,
+      items: snapItems,
+      online_payments: snapPayments.filter(p => p.ref || p.amount),
+      starting_cash: Number(snapCash) || 0,
+      expenses: Number(snapExpenses) || 0,
+      recorder_name: snapName || null,
+      status: "submitted",
+      submitted_at: phIso,
+    }).select().single();
+    if (error) {
+      console.error("Submit error:", error);
+      setSaving(false);
+      return;
+    }
+    console.log("Submit OK:", data.id, "items:", snapItems.length, "cash:", snapCash);
+    setDraftId(null);
     setSaving(false);
     setSubmitDone(true);
     onRecordChange();
