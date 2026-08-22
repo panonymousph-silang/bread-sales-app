@@ -116,7 +116,12 @@ const todayStr = () => new Date().toISOString().split("T")[0];
 const fmtDate = (d) => new Date(d + "T00:00:00").toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" });
 const fmtTime = (iso) => iso ? new Date(iso).toLocaleString("en-PH", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "";
 const currency = (n) => `₱${Number(n || 0).toLocaleString("en-PH", { minimumFractionDigits: 0 })}`;
-const calcLO = (item) => Math.max(0, (item.qty || 0) - (item.soldFull || 0) - (item.sold5 || 0));
+const calcLO = (item) => {
+  // In day-off mode: 50% stock includes today's items, so L/O only tracks regular sales
+  if (item.dayOff) return Math.max(0, (item.qty || 0) - (item.soldFull || 0) - (item.sold5 || 0));
+  // Normal: L/O = today's stock minus full-price and 5%-off sales
+  return Math.max(0, (item.qty || 0) - (item.soldFull || 0) - (item.sold5 || 0));
+};
 const calcWaste = (item) => Math.max(0, (item.stock50 || 0) - (item.sold50 || 0));
 const calcItemTotal = (item, isToyota) =>
   (item.soldFull || 0) * item.price +
@@ -412,6 +417,7 @@ function SellerView({ role, onRecordChange }) {
   const [startingCash, setStartingCash] = useState("");
   const [expenses, setExpenses] = useState("");
   const [draftId, setDraftId] = useState(null);
+  const [dayOffMode, setDayOffMode] = useState(false); // tomorrow is a day off
   const [savedTotals, setSavedTotals] = useState({ totalSales: 0, onlineTotal: 0, endingCash: 0 });
   const [submitDone, setSubmitDone] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
@@ -479,7 +485,7 @@ function SellerView({ role, onRecordChange }) {
     setItems([]); setPayments([{ ref: "", amount: "" }]);
     setStartingCash(""); setExpenses("");
     setDraftId(null); setSubmitDone(false); setConfirmDeleteId(null);
-    setAutoSaveStatus(""); setRecorderName("");
+    setAutoSaveStatus(""); setRecorderName(""); setDayOffMode(false);
     setStock50Items(allProds.map(p => ({ ...p, stock50: 0 })));
     loadData();
   };
@@ -508,14 +514,14 @@ function SellerView({ role, onRecordChange }) {
     const merged = selectedList.items.map(i => ({
       ...i, soldFull: 0, sold5: 0, sold50: 0,
       stock50: stock50Items.find(s => s.name === i.name)?.stock50 || 0,
+      dayOff: dayOffMode, // flag for L/O calc
     }));
     stock50Items.forEach(s => {
       if (s.stock50 > 0 && !merged.find(m => m.name === s.name)) {
-        merged.push({ name: s.name, price: s.price, qty: 0, soldFull: 0, sold5: 0, stock50: s.stock50, sold50: 0 });
+        merged.push({ name: s.name, price: s.price, qty: 0, soldFull: 0, sold5: 0, stock50: s.stock50, sold50: 0, dayOff: dayOffMode });
       }
     });
     setItems(merged);
-    // Create draft record immediately
     try {
       const rec = await api.addRecord({
         listId: selectedList.id, store: role, date: selectedList.date,
@@ -557,8 +563,22 @@ function SellerView({ role, onRecordChange }) {
   };
 
   const handleSubmit = async () => {
-    await handleSave(); // ensure latest data saved
+    if (!draftId) return;
+    setSaving(true);
+    // Cancel any pending auto-save timer
+    if (autoSaveTimer.current) { clearTimeout(autoSaveTimer.current); autoSaveTimer.current = null; }
+    // Do a final definitive save with current state values
+    await api.autoSaveRecord(
+      draftId,
+      items,
+      payments.filter(p => p.ref || p.amount),
+      Number(startingCash) || 0,
+      Number(expenses) || 0,
+      recorderName
+    );
+    // Now submit
     await api.updateRecord(draftId, { status: "submitted", submittedAt: new Date().toISOString() });
+    setSaving(false);
     setSubmitDone(true);
     onRecordChange();
     loadData();
@@ -682,22 +702,48 @@ function SellerView({ role, onRecordChange }) {
         <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>50% off Stock Entry</h2>
         <span style={S.pill(P.red)}>STEP 1</span>
       </div>
-      <p style={{ color: P.muted, fontSize: 13, marginTop: 4, marginBottom: 14 }}>Enter yesterday's leftovers as today's 50% off stock.</p>
+
+      {/* Day-off toggle */}
+      <div style={{ ...S.card, marginBottom: 14, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div>
+          <div style={{ fontWeight: 700, fontSize: 14 }}>🗓 Tomorrow is a day off</div>
+          <div style={{ fontSize: 12, color: P.muted, marginTop: 2 }}>
+            {dayOffMode
+              ? "50% stock = yesterday's L/O + today's stock"
+              : "50% stock = yesterday's L/O only"}
+          </div>
+        </div>
+        <div onClick={() => setDayOffMode(m => !m)}
+          style={{ width: 48, height: 26, borderRadius: 13, background: dayOffMode ? P.accent : P.border, cursor: "pointer", position: "relative", transition: "background 0.2s" }}>
+          <div style={{ width: 20, height: 20, borderRadius: "50%", background: "#fff", position: "absolute", top: 3, left: dayOffMode ? 25 : 3, transition: "left 0.2s" }} />
+        </div>
+      </div>
+
+      <p style={{ color: P.muted, fontSize: 13, marginTop: 0, marginBottom: 14 }}>
+        {dayOffMode
+          ? "Enter yesterday's L/O + any today's stock to discount at 50%."
+          : "Enter yesterday's leftovers as today's 50% off stock."}
+      </p>
       <div style={S.tw}>
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead><tr>
             <th style={{ ...S.th, textAlign: "left" }}>Item</th>
             <th style={S.th}>Today's Stock</th>
-            <th style={{ ...S.th, color: P.red }}>50% Stock</th>
+            <th style={{ ...S.th, color: P.red }}>50% Stock{dayOffMode ? " (L/O + Today)" : " (L/O)"}</th>
           </tr></thead>
           <tbody>
             {allProds.map((prod, i) => {
               const inList = selectedList?.items.find(x => x.name === prod.name);
+              const todayQty = inList ? inList.qty : 0;
+              // In day-off mode: max = no limit (yesterday's L/O + today's full stock)
+              // In normal mode: max = no strict limit (yesterday's L/O, unknown)
               return (
                 <tr key={prod.id} style={{ background: stock50Items[i]?.stock50 > 0 ? "#2a1520" : "transparent" }}>
                   <td style={{ ...S.td, textAlign: "left", fontSize: 12 }}>{prod.name}</td>
-                  <td style={{ ...S.td, color: P.muted }}>{inList ? inList.qty : "—"}</td>
-                  <td style={S.td}><Stepper value={stock50Items[i]?.stock50 || 0} onChange={v => updateStock50(i, v)} color={P.red} /></td>
+                  <td style={{ ...S.td, color: P.muted }}>{todayQty > 0 ? todayQty : "—"}</td>
+                  <td style={S.td}>
+                    <Stepper value={stock50Items[i]?.stock50 || 0} onChange={v => updateStock50(i, v)} color={P.red} />
+                  </td>
                 </tr>
               );
             })}
