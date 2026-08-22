@@ -479,6 +479,7 @@ function SellerView({ role, onRecordChange }) {
 
   // Save on demand only
   const [hasUserEdited, setHasUserEdited] = useState(false);
+  const [saveError, setSaveError] = useState("");
 
   const resetAll = () => {
     setView("menu"); setSelectedList(null); setStep("selectList");
@@ -578,7 +579,7 @@ function SellerView({ role, onRecordChange }) {
 
   const handleSubmit = async () => {
     setSaving(true);
-    // Snapshot ALL current state immediately
+    setSaveError("");
     const snapItems = [...items];
     const snapPayments = [...payments];
     const snapCash = startingCash;
@@ -588,50 +589,45 @@ function SellerView({ role, onRecordChange }) {
     const phIso = phNow.toISOString().replace("Z", "+08:00");
     const snapDate = selectedList?.date || phNow.toISOString().split("T")[0];
     const snapListId = selectedList?.id || null;
+    const snapDraftId = draftId;
 
-    if (draftId) {
-      // Update the existing draft record with current values and mark as submitted
-      const { error } = await supabase.from("sales_records").update({
-        items: snapItems,
-        online_payments: snapPayments.filter(p => p.ref || p.amount),
-        starting_cash: Number(snapCash) || 0,
-        expenses: Number(snapExpenses) || 0,
-        recorder_name: snapName || null,
-        status: "submitted",
-        submitted_at: phIso,
-      }).eq("id", draftId);
-      if (error) {
-        console.error("Submit update error:", error);
-        setSaving(false);
-        return;
+    try {
+      if (snapDraftId) {
+        const { error } = await supabase.from("sales_records").update({
+          items: snapItems,
+          online_payments: snapPayments.filter(p => p.ref || p.amount),
+          starting_cash: Number(snapCash) || 0,
+          expenses: Number(snapExpenses) || 0,
+          recorder_name: snapName || null,
+          status: "submitted",
+          submitted_at: phIso,
+        }).eq("id", snapDraftId);
+        if (error) throw error;
+      } else {
+        if (!snapListId) throw new Error("No list selected. Please go back and select a list.");
+        const { error } = await supabase.from("sales_records").insert({
+          list_id: snapListId,
+          store: role,
+          date: snapDate,
+          items: snapItems,
+          online_payments: snapPayments.filter(p => p.ref || p.amount),
+          starting_cash: Number(snapCash) || 0,
+          expenses: Number(snapExpenses) || 0,
+          recorder_name: snapName || null,
+          status: "submitted",
+          submitted_at: phIso,
+        });
+        if (error) throw error;
       }
-      console.log("Submit OK (update):", draftId, "items:", snapItems.length, "cash:", snapCash);
-    } else {
-      // No draft exists, insert new record
-      const { data, error } = await supabase.from("sales_records").insert({
-        list_id: snapListId,
-        store: role,
-        date: snapDate,
-        items: snapItems,
-        online_payments: snapPayments.filter(p => p.ref || p.amount),
-        starting_cash: Number(snapCash) || 0,
-        expenses: Number(snapExpenses) || 0,
-        recorder_name: snapName || null,
-        status: "submitted",
-        submitted_at: phIso,
-      }).select().single();
-      if (error) {
-        console.error("Submit insert error:", error);
-        setSaving(false);
-        return;
-      }
-      console.log("Submit OK (insert):", data.id, "items:", snapItems.length, "cash:", snapCash);
+      setDraftId(null);
+      setSubmitDone(true);
+      onRecordChange();
+      loadData();
+    } catch (err) {
+      setSaveError("Submit failed: " + (err.message || JSON.stringify(err)));
+    } finally {
+      setSaving(false);
     }
-    setDraftId(null);
-    setSaving(false);
-    setSubmitDone(true);
-    onRecordChange();
-    loadData();
   };
 
   const handleDeleteRecord = async (id) => {
@@ -871,8 +867,10 @@ function SellerView({ role, onRecordChange }) {
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         {/* Save status */}
-        <div style={{ textAlign: "right", fontSize: 11, color: P.muted, minHeight: 16 }}>
-          {draftId && `💡 Ready to submit · Total: ${currency(totals.totalSales)}`}
+        <div style={{ textAlign: "right", fontSize: 11, minHeight: 16 }}>
+          {saveError && <div style={{ color: P.red, marginBottom: 6 }}>{saveError}</div>}
+          {!saveError && draftId && <span style={{ color: P.muted }}>{`💡 Ready to submit · Total: ${currency(totals.totalSales)}`}</span>}
+          {!saveError && !draftId && <span style={{ color: P.orange }}>⚠️ No draft — go back and select a list</span>}
         </div>
         {/* Submit to Admin button (shown when draft exists) */}
         {draftId && (
