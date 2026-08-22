@@ -59,11 +59,13 @@ const api = {
     await supabase.from("sales_records").update(mapped).eq("id", id);
   },
   autoSaveRecord: async (id, items, onlinePayments, startingCash, expenses, recorderName) => {
-    await supabase.from("sales_records").update({
+    const { error } = await supabase.from("sales_records").update({
       items, online_payments: onlinePayments,
       starting_cash: startingCash, expenses,
       recorder_name: recorderName || null,
     }).eq("id", id);
+    if (error) console.error("autoSaveRecord error:", error);
+    else console.log("autoSaveRecord OK:", id, "items:", items?.length, "cash:", startingCash);
   },
   getDraftRecord: async (store) => {
     const { data, error } = await supabase.from("sales_records")
@@ -720,11 +722,6 @@ function SellerView({ role, onRecordChange }) {
       <div style={{ ...S.card, marginBottom: 14, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <div>
           <div style={{ fontWeight: 700, fontSize: 14 }}>🗓 Tomorrow is a day off</div>
-          <div style={{ fontSize: 12, color: P.muted, marginTop: 2 }}>
-            {dayOffMode
-              ? "50% stock = yesterday's L/O + today's stock"
-              : "50% stock = yesterday's L/O only"}
-          </div>
         </div>
         <div onClick={() => setDayOffMode(m => !m)}
           style={{ width: 48, height: 26, borderRadius: 13, background: dayOffMode ? P.accent : P.border, cursor: "pointer", position: "relative", transition: "background 0.2s" }}>
@@ -733,9 +730,7 @@ function SellerView({ role, onRecordChange }) {
       </div>
 
       <p style={{ color: P.muted, fontSize: 13, marginTop: 0, marginBottom: 14 }}>
-        {dayOffMode
-          ? "Enter yesterday's L/O + any today's stock to discount at 50%."
-          : "Enter yesterday's leftovers as today's 50% off stock."}
+        Enter yesterday's leftovers as today's 50% off stock.
       </p>
       <div style={S.tw}>
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
@@ -789,13 +784,13 @@ function SellerView({ role, onRecordChange }) {
       </div>
       <div style={S.tw}>
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
-          <thead><tr>{cols.map((h, i) => <th key={i} style={{ ...S.th, textAlign: i===0?"left":"center", color: colColor(h) }}>{h}</th>)}</tr></thead>
+          <thead><tr>{cols.map((h, i) => <th key={i} style={{ ...S.th, textAlign: i===0?"left":"center", color: colColor(h), ...(i===0?{position:"sticky",left:0,zIndex:2,background:P.surface}:{}) }}>{h}</th>)}</tr></thead>
           <tbody>
             {items.map((item, i) => {
               const lo = calcLO(item), waste = calcWaste(item), total = calcItemTotal(item, isToyota);
               return (
                 <tr key={i}>
-                  <td style={{ ...S.td, textAlign: "left", fontWeight: 500, fontSize: 12 }}>{item.name}</td>
+                  <td style={{ ...S.td, textAlign: "left", fontWeight: 500, fontSize: 12, position: "sticky", left: 0, background: P.card, zIndex: 1, minWidth: 90 }}>{item.name}</td>
                   <td style={{ ...S.td, color: P.muted, fontSize: 12 }}>{currency(item.price)}</td>
                   <td style={{ ...S.td, color: P.muted }}>{item.qty}{isToyota && item.stock50 > 0 && <span style={{ color: P.red, fontSize: 10 }}> +{item.stock50}</span>}</td>
                   <td style={S.td}><Stepper value={item.soldFull||0} onChange={v=>updateItem(i,"soldFull",v)} color={P.accent}/></td>
@@ -852,7 +847,7 @@ function SellerView({ role, onRecordChange }) {
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         {/* Save status */}
         <div style={{ textAlign: "right", fontSize: 11, color: P.muted, minHeight: 16 }}>
-          {draftId && "💡 Press Submit when done for the day"}
+          {draftId && `💡 Ready to submit · Total: ${currency(totals.totalSales)}`}
         </div>
         {/* Submit to Admin button (shown when draft exists) */}
         {draftId && (
