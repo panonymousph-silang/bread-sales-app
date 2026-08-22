@@ -117,16 +117,16 @@ const fmtDate = (d) => new Date(d + "T00:00:00").toLocaleDateString("en-PH", { m
 const fmtTime = (iso) => iso ? new Date(iso).toLocaleString("en-PH", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "";
 const currency = (n) => `₱${Number(n || 0).toLocaleString("en-PH", { minimumFractionDigits: 0 })}`;
 const calcLO = (item) => {
-  // In day-off mode: 50% stock includes today's items, so L/O only tracks regular sales
-  if (item.dayOff) return Math.max(0, (item.qty || 0) - (item.soldFull || 0) - (item.sold5 || 0));
-  // Normal: L/O = today's stock minus full-price and 5%-off sales
-  return Math.max(0, (item.qty || 0) - (item.soldFull || 0) - (item.sold5 || 0));
+  // L/O = today's stock - full price sales - 5% sales - same-day 50% sales (day-off mode only)
+  return Math.max(0, (item.qty || 0) - (item.soldFull || 0) - (item.sold5 || 0) - (item.soldToday50 || 0));
 };
 const calcWaste = (item) => Math.max(0, (item.stock50 || 0) - (item.sold50 || 0));
+// stock50 already = yesterday + today in day-off mode, so waste formula stays the same
 const calcItemTotal = (item, isToyota) =>
   (item.soldFull || 0) * item.price +
   (isToyota ? (item.sold5 || 0) * item.price * 0.95 : 0) +
-  (isToyota ? (item.sold50 || 0) * item.price * 0.50 : 0);
+  (isToyota ? (item.sold50 || 0) * item.price * 0.50 : 0) +
+  (isToyota ? (item.soldToday50 || 0) * item.price * 0.50 : 0);
 const calcTotals = (record) => {
   const isToyota = record.store === "toyota";
   const totalSales = (record.items || []).reduce((s, i) => s + calcItemTotal(i, isToyota), 0);
@@ -448,22 +448,25 @@ function SellerView({ role, onRecordChange }) {
     loadData();
     api.getDraftRecord(role).then(draft => {
       if (draft && draft.list) {
-        // Resume from draft
+        // Resume from draft - load saved data WITHOUT triggering auto-save
         setSelectedList(draft.list);
         setItems(draft.items || []);
         setPayments(draft.onlinePayments?.length ? draft.onlinePayments : [{ ref: "", amount: "" }]);
         setStartingCash(String(draft.startingCash || ""));
         setExpenses(String(draft.expenses || ""));
+        setRecorderName(draft.recorderName || "");
         setDraftId(draft.id);
+        setHasUserEdited(false); // don't auto-save on resume
         setStep("sales");
         setView("entry");
       }
     }).catch(() => {});
   }, [role]);
 
-  // Auto-save whenever items/payments/cash changes (debounced 1.5s)
+  // Manual save triggered by user interaction (debounced 3s, only after first user action)
+  const [hasUserEdited, setHasUserEdited] = useState(false);
   useEffect(() => {
-    if (!draftId || !items.length) return;
+    if (!draftId || !items.length || !hasUserEdited) return;
     setAutoSaveStatus("saving");
     if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
     autoSaveTimer.current = setTimeout(async () => {
@@ -476,16 +479,16 @@ function SellerView({ role, onRecordChange }) {
       );
       setAutoSaveStatus("saved");
       setTimeout(() => setAutoSaveStatus(""), 2000);
-    }, 1500);
+    }, 3000);
     return () => { if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current); };
-  }, [items, payments, startingCash, expenses, draftId, recorderName]);
+  }, [items, payments, startingCash, expenses, draftId, recorderName, hasUserEdited]);
 
   const resetAll = () => {
     setView("menu"); setSelectedList(null); setStep("selectList");
     setItems([]); setPayments([{ ref: "", amount: "" }]);
     setStartingCash(""); setExpenses("");
     setDraftId(null); setSubmitDone(false); setConfirmDeleteId(null);
-    setAutoSaveStatus(""); setRecorderName(""); setDayOffMode(false);
+    setAutoSaveStatus(""); setRecorderName(""); setDayOffMode(false); setHasUserEdited(false);
     setStock50Items(allProds.map(p => ({ ...p, stock50: 0 })));
     loadData();
   };
@@ -512,13 +515,13 @@ function SellerView({ role, onRecordChange }) {
 
   const goToSalesFromStock50 = async () => {
     const merged = selectedList.items.map(i => ({
-      ...i, soldFull: 0, sold5: 0, sold50: 0,
+      ...i, soldFull: 0, sold5: 0, sold50: 0, soldToday50: 0,
       stock50: stock50Items.find(s => s.name === i.name)?.stock50 || 0,
-      dayOff: dayOffMode, // flag for L/O calc
+      dayOff: dayOffMode,
     }));
     stock50Items.forEach(s => {
       if (s.stock50 > 0 && !merged.find(m => m.name === s.name)) {
-        merged.push({ name: s.name, price: s.price, qty: 0, soldFull: 0, sold5: 0, stock50: s.stock50, sold50: 0, dayOff: dayOffMode });
+        merged.push({ name: s.name, price: s.price, qty: 0, soldFull: 0, sold5: 0, sold50: 0, soldToday50: 0, stock50: s.stock50, dayOff: dayOffMode });
       }
     });
     setItems(merged);
@@ -533,12 +536,18 @@ function SellerView({ role, onRecordChange }) {
     setStep("sales");
   };
 
-  const updateItem = (i, field, val) =>
+  const updateItem = (i, field, val) => {
+    setHasUserEdited(true);
     setItems(prev => prev.map((x, j) => j === i ? { ...x, [field]: Math.max(0, val) } : x));
+  };
+  const updateSoldToday50 = (i, val) => {
+    setHasUserEdited(true);
+    setItems(prev => prev.map((x, j) => j === i ? { ...x, soldToday50: Math.max(0, val) } : x));
+  };
   const updateStock50 = (i, val) =>
     setStock50Items(prev => prev.map((x, j) => j === i ? { ...x, stock50: Math.max(0, val) } : x));
   const addPayment = () => setPayments(p => [...p, { ref: "", amount: "" }]);
-  const updPayment = (i, f, v) => setPayments(p => p.map((x, j) => j === i ? { ...x, [f]: v } : x));
+  const updPayment = (i, f, v) => { setHasUserEdited(true); setPayments(p => p.map((x, j) => j === i ? { ...x, [f]: v } : x)); };
   const removePayment = (i) => setPayments(p => p.filter((_, j) => j !== i));
 
   const handleSave = async () => {
@@ -756,10 +765,13 @@ function SellerView({ role, onRecordChange }) {
     </div>
   );
 
+  const dayOff = items.length > 0 && items[0].dayOff;
   const cols = isToyota
-    ? ["Item","Price","Stock","Full Price","5% off","50% Stock","50% Sales","L/O","Waste","Total"]
+    ? dayOff
+      ? ["Item","Price","Stock","Full Price","5% off","Today 50%","50% Stock","50% Sales","L/O","Waste","Total"]
+      : ["Item","Price","Stock","Full Price","5% off","50% Stock","50% Sales","L/O","Waste","Total"]
     : ["Item","Price","Stock","Full Price","L/O","Total"];
-  const colColor = (h) => h==="L/O"?P.muted:h==="Waste"?P.red:h==="50% Sales"?P.red:h==="5% off"?P.purple:h==="Total"?P.green:P.muted;
+  const colColor = (h) => h==="L/O"?P.muted:h==="Waste"?P.red:h==="50% Sales"?P.red:h==="5% off"?P.purple:h==="Today 50%"?"#fb923c":h==="Total"?P.green:P.muted;
 
   return (
     <div style={S.sec}>
@@ -784,6 +796,7 @@ function SellerView({ role, onRecordChange }) {
                   <td style={{ ...S.td, color: P.muted }}>{item.qty}{isToyota && item.stock50 > 0 && <span style={{ color: P.red, fontSize: 10 }}> +{item.stock50}</span>}</td>
                   <td style={S.td}><Stepper value={item.soldFull||0} onChange={v=>updateItem(i,"soldFull",v)} color={P.accent}/></td>
                   {isToyota&&<td style={S.td}><Stepper value={item.sold5||0} onChange={v=>updateItem(i,"sold5",v)} color={P.purple}/></td>}
+                  {isToyota&&dayOff&&<td style={S.td}><Stepper value={item.soldToday50||0} onChange={v=>updateSoldToday50(i,v)} color={P.orange}/></td>}
                   {isToyota&&<td style={{...S.td,color:P.red}}>{item.stock50||0}</td>}
                   {isToyota&&<td style={S.td}><Stepper value={item.sold50||0} onChange={v=>updateItem(i,"sold50",Math.min(item.stock50||0,v))} color={P.red}/></td>}
                   <td style={{...S.td,color:lo>0?P.orange:P.muted,fontWeight:600}}>{lo}</td>
@@ -793,7 +806,7 @@ function SellerView({ role, onRecordChange }) {
               );
             })}
             <tr style={{ background: P.surface, fontWeight: 700 }}>
-              <td colSpan={isToyota?9:5} style={{...S.td,textAlign:"right",color:P.muted}}>Total Sales</td>
+              <td colSpan={isToyota?(dayOff?10:9):5} style={{...S.td,textAlign:"right",color:P.muted}}>Total Sales</td>
               <td style={{...S.td,color:P.green}}>{currency(totals.totalSales)}</td>
             </tr>
           </tbody>
@@ -811,8 +824,8 @@ function SellerView({ role, onRecordChange }) {
       <div style={{ ...S.card, margin: "14px 0" }}>
         <div style={{ fontWeight: 700, marginBottom: 10, color: P.accent }}>💰 Cash Summary</div>
         <div style={S.row}>
-          <div style={S.col}><label style={S.lbl}>Starting Cash</label><input type="number" value={startingCash} onChange={e=>setStartingCash(e.target.value)} style={S.inp} placeholder="0"/></div>
-          <div style={S.col}><label style={S.lbl}>Expenses</label><input type="number" value={expenses} onChange={e=>setExpenses(e.target.value)} style={S.inp} placeholder="0"/></div>
+          <div style={S.col}><label style={S.lbl}>Starting Cash</label><input type="number" value={startingCash} onChange={e=>{setHasUserEdited(true);setStartingCash(e.target.value)}} style={S.inp} placeholder="0"/></div>
+          <div style={S.col}><label style={S.lbl}>Expenses</label><input type="number" value={expenses} onChange={e=>{setHasUserEdited(true);setExpenses(e.target.value)}} style={S.inp} placeholder="0"/></div>
         </div>
         <div style={S.sb}>
           <div style={{display:"flex",justifyContent:"space-between",padding:"4px 0",fontSize:13}}><span style={{color:P.muted}}>Total Sales</span><span style={{color:P.green,fontWeight:600}}>{currency(totals.totalSales)}</span></div>
