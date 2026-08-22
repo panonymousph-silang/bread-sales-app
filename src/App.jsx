@@ -577,7 +577,6 @@ function SellerView({ role, onRecordChange }) {
   };
 
   const handleSubmit = async () => {
-    if (!selectedList) return;
     setSaving(true);
     // Snapshot ALL current state immediately
     const snapItems = [...items];
@@ -585,33 +584,49 @@ function SellerView({ role, onRecordChange }) {
     const snapCash = startingCash;
     const snapExpenses = expenses;
     const snapName = recorderName;
-    const snapListId = selectedList.id;
-    const snapDate = selectedList.date;
     const phNow = new Date(Date.now() + 8 * 60 * 60 * 1000);
     const phIso = phNow.toISOString().replace("Z", "+08:00");
-    // Delete old draft if exists
+    const snapDate = selectedList?.date || phNow.toISOString().split("T")[0];
+    const snapListId = selectedList?.id || null;
+
     if (draftId) {
-      await supabase.from("sales_records").delete().eq("id", draftId);
+      // Update the existing draft record with current values and mark as submitted
+      const { error } = await supabase.from("sales_records").update({
+        items: snapItems,
+        online_payments: snapPayments.filter(p => p.ref || p.amount),
+        starting_cash: Number(snapCash) || 0,
+        expenses: Number(snapExpenses) || 0,
+        recorder_name: snapName || null,
+        status: "submitted",
+        submitted_at: phIso,
+      }).eq("id", draftId);
+      if (error) {
+        console.error("Submit update error:", error);
+        setSaving(false);
+        return;
+      }
+      console.log("Submit OK (update):", draftId, "items:", snapItems.length, "cash:", snapCash);
+    } else {
+      // No draft exists, insert new record
+      const { data, error } = await supabase.from("sales_records").insert({
+        list_id: snapListId,
+        store: role,
+        date: snapDate,
+        items: snapItems,
+        online_payments: snapPayments.filter(p => p.ref || p.amount),
+        starting_cash: Number(snapCash) || 0,
+        expenses: Number(snapExpenses) || 0,
+        recorder_name: snapName || null,
+        status: "submitted",
+        submitted_at: phIso,
+      }).select().single();
+      if (error) {
+        console.error("Submit insert error:", error);
+        setSaving(false);
+        return;
+      }
+      console.log("Submit OK (insert):", data.id, "items:", snapItems.length, "cash:", snapCash);
     }
-    // Insert fresh submitted record with current values
-    const { data, error } = await supabase.from("sales_records").insert({
-      list_id: snapListId,
-      store: role,
-      date: snapDate,
-      items: snapItems,
-      online_payments: snapPayments.filter(p => p.ref || p.amount),
-      starting_cash: Number(snapCash) || 0,
-      expenses: Number(snapExpenses) || 0,
-      recorder_name: snapName || null,
-      status: "submitted",
-      submitted_at: phIso,
-    }).select().single();
-    if (error) {
-      console.error("Submit error:", error);
-      setSaving(false);
-      return;
-    }
-    console.log("Submit OK:", data.id, "items:", snapItems.length, "cash:", snapCash);
     setDraftId(null);
     setSaving(false);
     setSubmitDone(true);
