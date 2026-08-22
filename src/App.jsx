@@ -67,22 +67,7 @@ const api = {
     if (error) console.error("autoSaveRecord error:", error);
     else console.log("autoSaveRecord OK:", id, "items:", items?.length, "cash:", startingCash);
   },
-  getDraftRecord: async (store) => {
-    const { data, error } = await supabase.from("sales_records")
-      .select("*, daily_lists(*)")
-      .eq("store", store)
-      .eq("status", "draft")
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (error || !data) return null;
-    // Only resume if the list date is today (PH time)
-    const now = new Date();
-    const phTime = new Date(now.getTime() + (8 * 60 * 60 * 1000));
-    const today = phTime.toISOString().split("T")[0];
-    if (data.date !== today) return null;
-    return { ...mapRecord(data), list: data.daily_lists };
-  },
+
   deleteRecord: async (id) => {
     await supabase.from("sales_records").delete().eq("id", id);
   },
@@ -99,6 +84,20 @@ const api = {
   getSubmitted: async () => {
     const { data } = await supabase.from("sales_records").select("*").eq("status", "submitted").order("submitted_at");
     return (data || []).map(mapRecord);
+  },
+  getTodayDraft: async (store) => {
+    const phNow = new Date(Date.now() + 8 * 60 * 60 * 1000);
+    const today = phNow.toISOString().split("T")[0];
+    const { data } = await supabase.from("sales_records")
+      .select("*, daily_lists(*)")
+      .eq("store", store)
+      .eq("status", "draft")
+      .eq("date", today)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (!data) return null;
+    return { ...mapRecord(data), list: data.daily_lists };
   },
   getPendingCount: async () => {
     const { count } = await supabase.from("sales_records").select("*", { count: "exact", head: true }).eq("status", "submitted");
@@ -127,7 +126,13 @@ const mapRecord = (r) => ({
 // ── Calc helpers ──────────────────────────────────────────────────────────────
 const todayStr = () => new Date().toISOString().split("T")[0];
 const fmtDate = (d) => new Date(d + "T00:00:00").toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" });
-const fmtTime = (iso) => iso ? new Date(iso).toLocaleString("en-PH", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "";
+const fmtTime = (iso) => {
+  if (!iso) return "";
+  return new Date(iso).toLocaleString("en-PH", {
+    month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
+    timeZone: "Asia/Manila"
+  });
+};
 const currency = (n) => `₱${Number(n || 0).toLocaleString("en-PH", { minimumFractionDigits: 0 })}`;
 const calcLO = (item) => {
   // L/O = today's stock - full price sales - 5% sales - same-day 50% sales (day-off mode only)
@@ -456,25 +461,21 @@ function SellerView({ role, onRecordChange }) {
     setLoading(false);
   }, [role]);
 
-  // On mount: check if there's an existing draft to resume
   useEffect(() => {
     loadData();
-    api.getDraftRecord(role).then(draft => {
-      if (draft && draft.list) {
-        // Resume from draft - load saved data WITHOUT triggering auto-save
-        setSelectedList(draft.list);
-        setItems(draft.items || []);
-        setPayments(draft.onlinePayments?.length ? draft.onlinePayments : [{ ref: "", amount: "" }]);
-        setStartingCash(String(draft.startingCash || ""));
-        setExpenses(String(draft.expenses || ""));
-        setRecorderName(draft.recorderName || "");
-        setDraftId(draft.id);
-        setHasUserEdited(false); // don't auto-save on resume
-        setStep("sales");
-        setView("entry");
-      }
+    // Check for today's draft to resume
+    api.getTodayDraft(role).then(draft => {
+      if (!draft || !draft.list) return;
+      setSelectedList(draft.list);
+      setItems(draft.items || []);
+      setPayments(draft.onlinePayments?.length ? draft.onlinePayments : [{ ref: "", amount: "" }]);
+      setStartingCash(String(draft.startingCash || ""));
+      setExpenses(String(draft.expenses || ""));
+      setRecorderName(draft.recorderName || "");
+      setDraftId(draft.id);
+      // Don't auto-navigate - just set draftId so "Resume" button appears in menu
     }).catch(() => {});
-  }, [role]);
+  }, [loadData, role]);
 
   // Save on demand only
   const [hasUserEdited, setHasUserEdited] = useState(false);
@@ -591,8 +592,11 @@ function SellerView({ role, onRecordChange }) {
       Number(snapExpenses) || 0,
       snapName
     );
-    // Then submit
-    await api.updateRecord(snapId, { status: "submitted", submittedAt: new Date().toISOString() });
+    // Then submit - use PH time (UTC+8)
+    const phNow = new Date(Date.now() + 8 * 60 * 60 * 1000);
+    const phIso = phNow.toISOString().replace("Z", "+08:00");
+    await api.updateRecord(snapId, { status: "submitted", submittedAt: phIso });
+    setDraftId(null); // clear draft so resume won't re-open this record
     setSaving(false);
     setSubmitDone(true);
     onRecordChange();
@@ -617,20 +621,10 @@ function SellerView({ role, onRecordChange }) {
         <span style={S.pill(storeColor)}>{STORES[role]}</span>
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-        {draftId ? (
-          <div onClick={() => setView("entry")} style={{ ...S.card, border: `2px solid ${P.orange}`, cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <div>
-              <div style={{ fontWeight: 700, color: P.orange }}>▶ Resume In-Progress Record</div>
-              <div style={{ fontSize: 12, color: P.muted, marginTop: 2 }}>You have unsaved sales — tap to continue</div>
-            </div>
-            <span style={{ color: P.orange, fontSize: 20 }}>→</span>
-          </div>
-        ) : (
-          <div onClick={() => { setView("entry"); setStep("selectList"); }} style={{ ...S.card, border: `1px solid ${P.accent}44`, cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <div><div style={{ fontWeight: 700, color: P.accent }}>📝 New Sales Record</div><div style={{ fontSize: 12, color: P.muted, marginTop: 2 }}>Enter today's sales</div></div>
-            <span style={{ color: P.accent, fontSize: 20 }}>→</span>
-          </div>
-        )}
+        <div onClick={() => { setView("entry"); setStep("selectList"); }} style={{ ...S.card, border: `1px solid ${P.accent}44`, cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div><div style={{ fontWeight: 700, color: P.accent }}>📝 New Sales Record</div><div style={{ fontSize: 12, color: P.muted, marginTop: 2 }}>Enter today's sales</div></div>
+          <span style={{ color: P.accent, fontSize: 20 }}>→</span>
+        </div>
         <div onClick={() => setView("history")} style={{ ...S.card, cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div><div style={{ fontWeight: 700 }}>📂 My Records</div><div style={{ fontSize: 12, color: P.muted, marginTop: 2 }}>{myRecords.length} records</div></div>
           <span style={{ color: P.muted, fontSize: 20 }}>→</span>
@@ -940,7 +934,9 @@ function AdminView({ onRecordChange }) {
   const grandTotal = filteredRecords.reduce((s, r) => s + calcTotals(r).totalSales, 0);
 
   const confirmRecord = async (id) => {
-    await api.updateRecord(id, { status: "confirmed", confirmedAt: new Date().toISOString() });
+    const phNow = new Date(Date.now() + 8 * 60 * 60 * 1000);
+    const phIso = phNow.toISOString().replace("Z", "+08:00");
+    await api.updateRecord(id, { status: "confirmed", confirmedAt: phIso });
     onRecordChange();
     loadInbox();
   };
