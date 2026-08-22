@@ -474,18 +474,8 @@ function SellerView({ role, onRecordChange }) {
     }).catch(() => {});
   }, [role]);
 
-  // Save on demand only - no auto-save timer to avoid overwriting with stale data
+  // Save on demand only
   const [hasUserEdited, setHasUserEdited] = useState(false);
-  const saveNow = useCallback(async (currentItems, currentPayments, currentCash, currentExpenses, currentName, id) => {
-    if (!id) return;
-    await api.autoSaveRecord(
-      id, currentItems,
-      currentPayments.filter(p => p.ref || p.amount),
-      Number(currentCash) || 0,
-      Number(currentExpenses) || 0,
-      currentName
-    );
-  }, []);
 
   const resetAll = () => {
     setView("menu"); setSelectedList(null); setStep("selectList");
@@ -557,12 +547,24 @@ function SellerView({ role, onRecordChange }) {
   const handleSave = async () => {
     if (!draftId) return;
     setSaving(true);
+    const snapItems = items;
+    const snapPayments = payments;
+    const snapCash = startingCash;
+    const snapExpenses = expenses;
+    const snapName = recorderName;
+    const snapId = draftId;
     const currentTotals = calcTotals({
-      store: role, items, onlinePayments: payments,
-      startingCash: Number(startingCash) || 0,
-      expenses: Number(expenses) || 0,
+      store: role, items: snapItems, onlinePayments: snapPayments,
+      startingCash: Number(snapCash) || 0,
+      expenses: Number(snapExpenses) || 0,
     });
-    await saveNow(items, payments, startingCash, expenses, recorderName, draftId);
+    await api.autoSaveRecord(
+      snapId, snapItems,
+      snapPayments.filter(p => p.ref || p.amount),
+      Number(snapCash) || 0,
+      Number(snapExpenses) || 0,
+      snapName
+    );
     setSavedTotals(currentTotals);
     setSaving(false);
     onRecordChange();
@@ -572,10 +574,23 @@ function SellerView({ role, onRecordChange }) {
   const handleSubmit = async () => {
     if (!draftId) return;
     setSaving(true);
-    // Final save with current React state values
-    await saveNow(items, payments, startingCash, expenses, recorderName, draftId);
+    // Snapshot current state values before any async operations
+    const snapItems = items;
+    const snapPayments = payments;
+    const snapCash = startingCash;
+    const snapExpenses = expenses;
+    const snapName = recorderName;
+    const snapId = draftId;
+    // Save with snapshotted values
+    await api.autoSaveRecord(
+      snapId, snapItems,
+      snapPayments.filter(p => p.ref || p.amount),
+      Number(snapCash) || 0,
+      Number(snapExpenses) || 0,
+      snapName
+    );
     // Then submit
-    await api.updateRecord(draftId, { status: "submitted", submittedAt: new Date().toISOString() });
+    await api.updateRecord(snapId, { status: "submitted", submittedAt: new Date().toISOString() });
     setSaving(false);
     setSubmitDone(true);
     onRecordChange();
