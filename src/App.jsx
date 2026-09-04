@@ -903,11 +903,11 @@ function SellerView({ role, onRecordChange }) {
 
 // ── Admin View ────────────────────────────────────────────────────────────────
 function AdminView({ onRecordChange }) {
-  const now = new Date();
+  const phNowInit = new Date(Date.now() + 8 * 60 * 60 * 1000);
   const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
   const [tab, setTab] = useState("inbox");
-  const [viewYear, setViewYear] = useState(now.getFullYear());
-  const [viewMonth, setViewMonth] = useState(now.getMonth()+1);
+  const [viewYear, setViewYear] = useState(phNowInit.getUTCFullYear());
+  const [viewMonth, setViewMonth] = useState(phNowInit.getUTCMonth()+1);
   const [filterStore, setFilterStore] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
@@ -954,8 +954,8 @@ function AdminView({ onRecordChange }) {
     setLoading(false);
   }, [viewYear, viewMonth]);
 
-  useEffect(() => { if (tab === "inbox") loadInbox(); }, [tab, loadInbox]);
-  useEffect(() => { if (tab === "records") loadRecords(); }, [tab, loadRecords, viewYear, viewMonth]);
+  useEffect(() => { loadInbox(); }, [loadInbox]);
+  useEffect(() => { loadRecords(); }, [loadRecords]);
 
   const filteredRecords = records.filter(r =>
     (filterStore === "all" || r.store === filterStore) &&
