@@ -97,6 +97,7 @@ const api = {
       .limit(1)
       .maybeSingle();
     if (!data) return null;
+    // If draft has no valid list, still return it so user can submit
     return { ...mapRecord(data), list: data.daily_lists };
   },
   getPendingCount: async () => {
@@ -465,8 +466,9 @@ function SellerView({ role, onRecordChange }) {
     loadData();
     // Check for today's draft to resume
     api.getTodayDraft(role).then(draft => {
-      if (!draft || !draft.list) return;
-      setSelectedList(draft.list);
+      if (!draft) return;
+      // Load draft data even if list is missing
+      if (draft.list) setSelectedList(draft.list);
       setItems(draft.items || []);
       setPayments(draft.onlinePayments?.length ? draft.onlinePayments : [{ ref: "", amount: "" }]);
       setStartingCash(String(draft.startingCash || ""));
@@ -953,7 +955,7 @@ function AdminView({ onRecordChange }) {
   }, [viewYear, viewMonth]);
 
   useEffect(() => { if (tab === "inbox") loadInbox(); }, [tab, loadInbox]);
-  useEffect(() => { if (tab === "records") loadRecords(); }, [tab, loadRecords]);
+  useEffect(() => { if (tab === "records") loadRecords(); }, [tab, loadRecords, viewYear, viewMonth]);
 
   const filteredRecords = records.filter(r =>
     (filterStore === "all" || r.store === filterStore) &&
