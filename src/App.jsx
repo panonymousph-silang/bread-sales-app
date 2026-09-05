@@ -947,15 +947,24 @@ function AdminView({ onRecordChange }) {
     setLoading(false);
   }, []);
 
-  const loadRecords = async (y, m) => {
+  const fetchRecords = async (y, m) => {
     setLoading(true);
-    const data = await api.getRecordsByMonth(y ?? viewYear, m ?? viewMonth);
-    setRecords(data);
+    console.log("Fetching records for", y, m);
+    const { data, error } = await supabase.from("sales_records")
+      .select("*")
+      .gte("date", `${y}-${String(m).padStart(2,"0")}-01`)
+      .lte("date", `${y}-${String(m).padStart(2,"0")}-31`)
+      .order("date");
+    if (error) console.error("fetchRecords error:", error);
+    console.log("Got records:", data?.length);
+    setRecords((data || []).map(mapRecord));
     setLoading(false);
   };
 
   useEffect(() => { loadInbox(); }, [loadInbox]);
-  useEffect(() => { loadRecords(viewYear, viewMonth); }, [viewYear, viewMonth]);
+  useEffect(() => {
+    fetchRecords(viewYear, viewMonth);
+  }, [viewYear, viewMonth]);
 
   const filteredRecords = records.filter(r =>
     (filterStore === "all" || r.store === filterStore) &&
@@ -1088,12 +1097,12 @@ function AdminView({ onRecordChange }) {
       {tab==="records"&&(
         <>
           <div style={{...S.row,marginBottom:14}}>
-            <div style={S.col}><label style={S.lbl}>Year</label><select value={viewYear} onChange={e=>{const y=Number(e.target.value); setViewYear(y); loadRecords(y, viewMonth);}} style={S.inp}>{[2024,2025,2026].map(y=><option key={y}>{y}</option>)}</select></div>
-            <div style={S.col}><label style={S.lbl}>Month</label><select value={viewMonth} onChange={e=>{const m=Number(e.target.value); setViewMonth(m); loadRecords(viewYear, m);}} style={S.inp}>{months.map((m,i)=><option key={i} value={i+1}>{m}</option>)}</select></div>
+            <div style={S.col}><label style={S.lbl}>Year</label><select value={viewYear} onChange={e=>setViewYear(Number(e.target.value))} style={S.inp}>{[2024,2025,2026].map(y=><option key={y}>{y}</option>)}</select></div>
+            <div style={S.col}><label style={S.lbl}>Month</label><select value={viewMonth} onChange={e=>setViewMonth(Number(e.target.value))} style={S.inp}>{months.map((m,i)=><option key={i} value={i+1}>{m}</option>)}</select></div>
             <div style={S.col}><label style={S.lbl}>Store</label><select value={filterStore} onChange={e=>setFilterStore(e.target.value)} style={S.inp}><option value="all">All</option><option value="toyota">Toyota</option><option value="aws">AWS</option></select></div>
             <div style={S.col}><label style={S.lbl}>Status</label><select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} style={S.inp}><option value="all">All</option><option value="draft">Draft</option><option value="submitted">Submitted</option><option value="confirmed">Confirmed</option></select></div>
           </div>
-          <button onClick={() => loadRecords(viewYear, viewMonth)} style={{...S.btn("ghost"),marginBottom:14,fontSize:13}}>🔄 Refresh</button>
+          <button onClick={() => fetchRecords(viewYear, viewMonth)} style={{...S.btn("ghost"),marginBottom:14,fontSize:13}}>🔄 Refresh</button>
           <div style={{display:"flex",gap:10,marginBottom:14,flexWrap:"wrap"}}>
             <div style={{...S.card,flex:1,minWidth:90,textAlign:"center"}}><div style={{color:P.muted,fontSize:11,textTransform:"uppercase"}}>Days</div><div style={{fontSize:22,fontWeight:700,color:P.accent}}>{filteredRecords.length}</div></div>
             <div style={{...S.card,flex:1,minWidth:90,textAlign:"center"}}><div style={{color:P.muted,fontSize:11,textTransform:"uppercase"}}>Total</div><div style={{fontSize:22,fontWeight:700,color:P.green}}>{currency(grandTotal)}</div></div>
