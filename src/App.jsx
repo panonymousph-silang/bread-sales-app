@@ -1108,7 +1108,6 @@ function AdminView({ onRecordChange }) {
             <div style={S.col}><label style={S.lbl}>Status</label><select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} style={S.inp}><option value="all">All</option><option value="draft">Draft</option><option value="submitted">Submitted</option><option value="confirmed">Confirmed</option></select></div>
           </div>
           <button onClick={() => fetchRecords(viewYear, viewMonth)} style={{...S.btn("ghost"),marginBottom:14,fontSize:13}}>🔄 Refresh</button>
-          <div style={{fontSize:11,color:P.muted,marginBottom:10}}>Debug: fetching {viewYear}-{String(viewMonth).padStart(2,"0")} · {records.length} records loaded</div>
           <div style={{display:"flex",gap:10,marginBottom:14,flexWrap:"wrap"}}>
             <div style={{...S.card,flex:1,minWidth:90,textAlign:"center"}}><div style={{color:P.muted,fontSize:11,textTransform:"uppercase"}}>Days</div><div style={{fontSize:22,fontWeight:700,color:P.accent}}>{filteredRecords.length}</div></div>
             <div style={{...S.card,flex:1,minWidth:90,textAlign:"center"}}><div style={{color:P.muted,fontSize:11,textTransform:"uppercase"}}>Total</div><div style={{fontSize:22,fontWeight:700,color:P.green}}>{currency(grandTotal)}</div></div>
