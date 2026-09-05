@@ -947,9 +947,9 @@ function AdminView({ onRecordChange }) {
     setLoading(false);
   }, []);
 
-  const loadRecords = useCallback(async () => {
+  const loadRecords = useCallback(async (y, m) => {
     setLoading(true);
-    const data = await api.getRecordsByMonth(viewYear, viewMonth);
+    const data = await api.getRecordsByMonth(y || viewYear, m || viewMonth);
     setRecords(data);
     setLoading(false);
   }, [viewYear, viewMonth]);
@@ -1088,8 +1088,8 @@ function AdminView({ onRecordChange }) {
       {tab==="records"&&(
         <>
           <div style={{...S.row,marginBottom:14}}>
-            <div style={S.col}><label style={S.lbl}>Year</label><select value={viewYear} onChange={e=>setViewYear(Number(e.target.value))} style={S.inp}>{[2024,2025,2026].map(y=><option key={y}>{y}</option>)}</select></div>
-            <div style={S.col}><label style={S.lbl}>Month</label><select value={viewMonth} onChange={e=>setViewMonth(Number(e.target.value))} style={S.inp}>{months.map((m,i)=><option key={i} value={i+1}>{m}</option>)}</select></div>
+            <div style={S.col}><label style={S.lbl}>Year</label><select value={viewYear} onChange={e=>{const y=Number(e.target.value); setViewYear(y); loadRecords(y, viewMonth);}} style={S.inp}>{[2024,2025,2026].map(y=><option key={y}>{y}</option>)}</select></div>
+            <div style={S.col}><label style={S.lbl}>Month</label><select value={viewMonth} onChange={e=>{const m=Number(e.target.value); setViewMonth(m); loadRecords(viewYear, m);}} style={S.inp}>{months.map((m,i)=><option key={i} value={i+1}>{m}</option>)}</select></div>
             <div style={S.col}><label style={S.lbl}>Store</label><select value={filterStore} onChange={e=>setFilterStore(e.target.value)} style={S.inp}><option value="all">All</option><option value="toyota">Toyota</option><option value="aws">AWS</option></select></div>
             <div style={S.col}><label style={S.lbl}>Status</label><select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} style={S.inp}><option value="all">All</option><option value="draft">Draft</option><option value="submitted">Submitted</option><option value="confirmed">Confirmed</option></select></div>
           </div>
