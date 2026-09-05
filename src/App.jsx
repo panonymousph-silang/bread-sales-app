@@ -76,8 +76,9 @@ const api = {
     return (data || []).map(mapRecord);
   },
   getRecordsByMonth: async (year, month) => {
+    const lastDay = new Date(year, month, 0).getDate();
     const start = `${year}-${String(month).padStart(2, "0")}-01`;
-    const end = `${year}-${String(month).padStart(2, "0")}-31`;
+    const end = `${year}-${String(month).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
     const { data } = await supabase.from("sales_records").select("*").gte("date", start).lte("date", end).order("date");
     return (data || []).map(mapRecord);
   },
@@ -949,11 +950,15 @@ function AdminView({ onRecordChange }) {
 
   const fetchRecords = async (y, m) => {
     setLoading(true);
-    console.log("Fetching records for", y, m);
+    // Get last day of month correctly
+    const lastDay = new Date(y, m, 0).getDate();
+    const start = `${y}-${String(m).padStart(2,"0")}-01`;
+    const end = `${y}-${String(m).padStart(2,"0")}-${String(lastDay).padStart(2,"0")}`;
+    console.log("Fetching records for", start, "to", end);
     const { data, error } = await supabase.from("sales_records")
       .select("*")
-      .gte("date", `${y}-${String(m).padStart(2,"0")}-01`)
-      .lte("date", `${y}-${String(m).padStart(2,"0")}-31`)
+      .gte("date", start)
+      .lte("date", end)
       .order("date");
     if (error) console.error("fetchRecords error:", error);
     console.log("Got records:", data?.length);
