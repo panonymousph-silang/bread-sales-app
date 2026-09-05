@@ -947,15 +947,15 @@ function AdminView({ onRecordChange }) {
     setLoading(false);
   }, []);
 
-  const loadRecords = useCallback(async (y, m) => {
+  const loadRecords = async (y, m) => {
     setLoading(true);
-    const data = await api.getRecordsByMonth(y || viewYear, m || viewMonth);
+    const data = await api.getRecordsByMonth(y ?? viewYear, m ?? viewMonth);
     setRecords(data);
     setLoading(false);
-  }, [viewYear, viewMonth]);
+  };
 
   useEffect(() => { loadInbox(); }, [loadInbox]);
-  useEffect(() => { loadRecords(); }, [loadRecords]);
+  useEffect(() => { loadRecords(viewYear, viewMonth); }, [viewYear, viewMonth]);
 
   const filteredRecords = records.filter(r =>
     (filterStore === "all" || r.store === filterStore) &&
@@ -1093,7 +1093,7 @@ function AdminView({ onRecordChange }) {
             <div style={S.col}><label style={S.lbl}>Store</label><select value={filterStore} onChange={e=>setFilterStore(e.target.value)} style={S.inp}><option value="all">All</option><option value="toyota">Toyota</option><option value="aws">AWS</option></select></div>
             <div style={S.col}><label style={S.lbl}>Status</label><select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} style={S.inp}><option value="all">All</option><option value="draft">Draft</option><option value="submitted">Submitted</option><option value="confirmed">Confirmed</option></select></div>
           </div>
-          <button onClick={loadRecords} style={{...S.btn("ghost"),marginBottom:14,fontSize:13}}>🔄 Refresh</button>
+          <button onClick={() => loadRecords(viewYear, viewMonth)} style={{...S.btn("ghost"),marginBottom:14,fontSize:13}}>🔄 Refresh</button>
           <div style={{display:"flex",gap:10,marginBottom:14,flexWrap:"wrap"}}>
             <div style={{...S.card,flex:1,minWidth:90,textAlign:"center"}}><div style={{color:P.muted,fontSize:11,textTransform:"uppercase"}}>Days</div><div style={{fontSize:22,fontWeight:700,color:P.accent}}>{filteredRecords.length}</div></div>
             <div style={{...S.card,flex:1,minWidth:90,textAlign:"center"}}><div style={{color:P.muted,fontSize:11,textTransform:"uppercase"}}>Total</div><div style={{fontSize:22,fontWeight:700,color:P.green}}>{currency(grandTotal)}</div></div>
