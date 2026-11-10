@@ -1,787 +1,1210 @@
-<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>RichAnn Farm Orders</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&family=Zen+Maru+Gothic:wght@700&display=swap">
-<style>
-/* Layout: single column, white sheet; three role tabs; every list is a light-blue table. Single light theme by request. */
-:root{
-  --bg:#ffffff;
-  --ink:#16323d;
-  --muted:#5c7480;
-  --line:#b9dcea;
-  --sky:#e3f4fb;
-  --sky-head:#bfe6f5;
-  --sky-deep:#1d7fa6;
-  --leaf:#2f8a4e;
-  --warn:#c0562b;
-  --font-body:"Zen Kaku Gothic New",system-ui,-apple-system,"Segoe UI",sans-serif;
-  --font-display:"Zen Maru Gothic","Zen Kaku Gothic New",system-ui,sans-serif;
-  color-scheme:light;
-}
-*,*::before,*::after{box-sizing:border-box}
-[hidden]{display:none!important}
-:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
-body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font-body);font-size:15px;line-height:1.6}
-.wrap{max-width:980px;margin:0 auto;padding-block:20px 60px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:18px}
-header{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:8px}
-h1{font-family:var(--font-display);font-size:1.6rem;margin:0;letter-spacing:.01em;text-wrap:balance}
-h1 small{display:block;font-family:var(--font-body);font-size:.75rem;font-weight:700;color:var(--leaf);letter-spacing:.12em}
-h2{font-family:var(--font-display);font-size:1.15rem;margin:0}
-.sub{color:var(--muted);font-size:.85rem;margin:0}
-nav{display:flex;gap:6px;border-bottom:2px solid var(--line)}
-nav a{padding:8px 16px;border-radius:10px 10px 0 0;text-decoration:none;color:var(--muted);font-weight:700;border:2px solid transparent;border-bottom:none;margin-bottom:-2px}
-nav a[aria-current="page"]{color:var(--sky-deep);background:var(--bg);border-color:var(--line)}
-nav a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:3px solid var(--sky-deep);outline-offset:2px}
-section.panel,.panel{display:flex;flex-direction:column;gap:16px}
-.row{display:flex;flex-wrap:wrap;gap:10px;align-items:end}
-label.f{display:flex;flex-direction:column;gap:4px;font-size:.78rem;font-weight:700;color:var(--muted);letter-spacing:.04em;text-transform:uppercase}
-input,select,textarea{font:inherit;color:var(--ink);background:var(--bg);border:1.5px solid var(--line);border-radius:8px;padding:6px 8px;text-transform:none;letter-spacing:normal}
-textarea{width:100%;min-height:150px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.85rem;box-sizing:border-box}
-input.name{min-width:0;width:min(320px,100%);font-size:1rem}
-input.num{width:84px;text-align:right;font-variant-numeric:tabular-nums}
-button{font:inherit;font-weight:700;border-radius:8px;border:1.5px solid var(--sky-deep);background:var(--bg);color:var(--sky-deep);padding:6px 14px;cursor:pointer}
-button.primary{background:var(--sky-deep);color:#fff}
-button.done{background:var(--leaf);border-color:var(--leaf);color:#fff}
-button.danger{border-color:var(--warn);color:var(--warn)}
-button.link{border:none;padding:0;color:var(--muted);font-weight:500;text-decoration:underline}
-button:disabled{opacity:.45;cursor:not-allowed}
-button.big{padding:12px 28px;font-size:1.05rem}
-.tbl{overflow-x:auto;border-radius:10px;border:1.5px solid var(--line)}
-table{border-collapse:collapse;width:100%;background:var(--sky);font-variant-numeric:tabular-nums}
-th{background:var(--sky-head);text-align:left;font-size:.78rem;letter-spacing:.04em;text-transform:uppercase;padding:8px 10px;white-space:nowrap}
-td{padding:7px 10px;border-top:1px solid var(--line);vertical-align:middle}
-td.n,th.n{text-align:right;white-space:nowrap}
-tfoot td{background:var(--sky-head);font-weight:700}
-tr.out td{color:var(--muted)}
-tr.packed td{background:#d9f0e1}
-.pill{display:inline-block;font-size:.75rem;font-weight:700;padding:1px 9px;border-radius:99px;border:1.5px solid currentColor;white-space:nowrap}
-.pill.ok{color:var(--leaf)}.pill.wait{color:var(--muted)}.pill.low{color:var(--warn)}
-.cust{font-weight:700}
-.detail{font-size:.78rem;color:var(--muted);font-weight:400}
-.card{border:1.5px solid var(--line);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:10px}
-.cardhead{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:8px}
-.lock{max-width:360px;margin:24px auto;text-align:center;align-items:center}
-.lock input{width:100%;box-sizing:border-box;text-align:center;font-size:1.05rem}
-.msg{padding:10px 14px;border-radius:10px;background:var(--sky);border:1.5px solid var(--line)}
-.msg.err{border-color:var(--warn);color:var(--warn);background:#fff3ee}
-.msg.ok{border-color:var(--leaf);color:var(--leaf);background:#eef8f1}
-.total{font-size:1.25rem;font-weight:700;font-variant-numeric:tabular-nums}
-.manual{display:inline-flex;align-items:center;gap:4px;margin-left:6px}
-.hint{font-size:.8rem;color:var(--muted);margin:0}
-.empty{padding:28px;text-align:center;color:var(--muted)}
-.inv-list{display:flex;flex-direction:column;gap:14px;align-items:flex-start}
-.inv{width:100%;max-width:380px;border:1.5px solid var(--line);border-radius:10px;padding:12px;background:var(--bg);font-size:12px;line-height:1.4;display:flex;flex-direction:column;gap:8px}
-.inv-top{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}
-.inv-farm{font-family:var(--font-display);font-size:14px;color:var(--leaf)}
-.inv-to{font-size:13px}
-.inv-right{text-align:right;color:var(--muted);font-size:11px}
-.inv-word{font-weight:700;letter-spacing:.14em;color:var(--sky-deep);font-size:12px}
-.inv-t{table-layout:auto;border-radius:6px;overflow:hidden;border:1px solid var(--line)}
-.inv-t th{font-size:10px;padding:4px 6px}
-.inv-t td{padding:3px 6px;font-size:12px}
-.inv-t tfoot td{background:var(--sky);font-weight:500}
-.inv-t tr.inv-due td{background:var(--sky-head);font-weight:700;font-size:13px}
-.inv-foot{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
-.inv-note{font-size:10.5px;color:var(--warn)}
+import { useState, useEffect, useCallback } from "react";
+import { createClient } from "@supabase/supabase-js";
 
-@media (max-width:560px){h1{font-size:1.3rem}nav a{padding:8px 10px}td,th{padding:6px 7px}}
-@media (prefers-reduced-motion:reduce){*{transition:none!important}}
-</style>
-</head>
-<body>
-<div class="wrap">
-  <header>
-    <h1><small>RICHANN VEGETABLE FARM</small>Vegetable Orders</h1>
-    <p class="sub" id="roundLabel">Loading…</p>
-  </header>
-  <nav>
-    <a href="#order" data-tab="order">Order</a>
-    <a href="#farmer" data-tab="farmer">Farmer</a>
-    <a href="#admin" data-tab="admin">Admin</a>
-  </nav>
-  <div id="status" class="msg" hidden></div>
+const SUPABASE_URL = "https://tmgzdlwldsnibpuxhiht.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRtZ3pkbHdsZHNuaWJwdXhoaWh0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYxNjU1NDIsImV4cCI6MjEwMTc0MTU0Mn0.pHo-t8k5mEYkzGhaUHh7bV28PIxetJJ3JmOVNlQIels";
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-  <!-- ORDER -->
-  <section class="panel" id="p-order">
-    <div id="orderDone" class="panel" hidden></div>
-    <form id="orderForm" class="panel" novalidate>
-      <label class="f" for="custName">Your name
-        <input id="custName" class="name" autocomplete="name" placeholder="e.g. Maria Santos">
-      </label>
-      <div class="tbl"><table>
-        <thead><tr><th>Vegetable</th><th class="n">Price</th><th class="n">Available</th><th>Quantity</th><th class="n">Subtotal</th></tr></thead>
-        <tbody id="orderBody"></tbody>
-        <tfoot><tr><td colspan="4">Total</td><td class="n" id="orderTotal">₱0</td></tr></tfoot>
-      </table></div>
-      <p class="hint">For more than 2 kg, choose "Over 2 kg (type amount)". Herbs priced per 100 g have a 100 g minimum.</p>
-      <div id="orderErr" class="msg err" hidden></div>
-      <div><button type="submit" class="primary big" id="orderBtn">Confirm order</button></div>
-    </form>
-    <div class="card" id="mySec" hidden>
-      <h2>Check or change my order</h2>
-      <label class="f" for="myName">Your name<select id="myName"></select></label>
-      <div id="myView" class="panel"></div>
-    </div>
-  </section>
+const PINS = { staff: "1111", toyota: "2222", aws: "3333", admin: "4444" };
+const STORES = { toyota: "Toyota Sta Rosa", aws: "AWS" };
 
-  <!-- LOCK (shared by Farmer and Admin) -->
-  <section class="panel" id="p-lock" hidden>
-    <form id="lockForm" class="card lock" novalidate>
-      <h2 id="lockTitle">Farmer access</h2>
-      <p class="hint">Enter the password to continue.</p>
-      <label class="f" for="lockPw" style="width:100%">Password<input id="lockPw" type="password" autocomplete="current-password"></label>
-      <div id="lockErr" class="msg err" hidden></div>
-      <button type="submit" class="primary">Unlock</button>
-    </form>
-  </section>
+// ── Supabase helpers ──────────────────────────────────────────────────────────
+const api = {
+  getProducts: async () => {
+    const { data } = await supabase.from("products").select("*").order("name");
+    return data || [];
+  },
+  updateProductPrice: async (id, price) => {
+    await supabase.from("products").update({ price }).eq("id", id);
+  },
+  addProduct: async (name, price) => {
+    const { data } = await supabase.from("products").insert({ name, price }).select().single();
+    return data;
+  },
+  deleteProduct: async (id) => {
+    await supabase.from("products").delete().eq("id", id);
+  },
+  addList: async (date, store, items) => {
+    const { data } = await supabase.from("daily_lists").insert({ date, store, items }).select().single();
+    return data;
+  },
+  getLists: async (store) => {
+    // Use Philippines timezone (UTC+8)
+    const now = new Date();
+    const phTime = new Date(now.getTime() + (8 * 60 * 60 * 1000));
+    const today = phTime.toISOString().split("T")[0];
+    // Get today's lists that are NOT yet used (no sales record, even deleted ones)
+    // We track used lists by checking the list's "used" flag
+    const { data: lists } = await supabase.from("daily_lists").select("*")
+      .eq("store", store).eq("date", today).eq("used", false)
+      .order("created_at", { ascending: false });
+    return lists || [];
+  },
+  addRecord: async (r) => {
+    const { data, error } = await supabase.from("sales_records").insert({
+      list_id: r.listId, store: r.store, date: r.date,
+      items: r.items, online_payments: r.onlinePayments,
+      starting_cash: r.startingCash, expenses: r.expenses, status: "draft",
+      recorder_name: r.recorderName || null,
+    }).select().single();
+    if (error) { console.error("addRecord error:", error); throw error; }
+    await supabase.from("daily_lists").update({ used: true }).eq("id", r.listId);
+    return data;
+  },
+  updateRecord: async (id, patch) => {
+    const mapped = {};
+    if (patch.status !== undefined) mapped.status = patch.status;
+    if (patch.submittedAt !== undefined) mapped.submitted_at = patch.submittedAt;
+    if (patch.confirmedAt !== undefined) mapped.confirmed_at = patch.confirmedAt;
+    await supabase.from("sales_records").update(mapped).eq("id", id);
+  },
+  autoSaveRecord: async (id, items, onlinePayments, startingCash, expenses, recorderName) => {
+    const { error } = await supabase.from("sales_records").update({
+      items, online_payments: onlinePayments,
+      starting_cash: startingCash, expenses,
+      recorder_name: recorderName || null,
+    }).eq("id", id);
+    if (error) console.error("autoSaveRecord error:", error);
+    else console.log("autoSaveRecord OK:", id, "items:", items?.length, "cash:", startingCash);
+  },
 
-  <!-- FARMER -->
-  <section class="panel" id="p-farmer" hidden>
-    <div class="row">
-      <label class="f" for="farmRound">Delivery<select id="farmRound" class="roundSel"></select></label>
-      <p class="sub" id="farmProgress"></p>
-      <button type="button" class="link" data-lockout="farmer">Lock</button>
-    </div>
-    <h2>Totals by vegetable</h2>
-    <div class="tbl"><table>
-      <thead><tr><th>Vegetable</th><th class="n">Stock</th><th class="n">Ordered</th><th class="n">Packed</th><th class="n">Remaining</th></tr></thead>
-      <tbody id="farmSum"></tbody>
-    </table></div>
-    <h2>Bill to admin</h2>
-    <div class="tbl"><table>
-      <thead><tr><th>Vegetable</th><th class="n">Qty sold</th><th class="n">Price</th><th class="n">Subtotal</th></tr></thead>
-      <tbody id="farmBill"></tbody>
-      <tfoot>
-        <tr><td colspan="3">Subtotal</td><td class="n" id="farmSub">₱0</td></tr>
-        <tr><td colspan="3"><label for="farmFee">Delivery fee</label></td><td class="n">₱<input type="number" class="num" id="farmFee" min="0" step="1" value="0"></td></tr>
-        <tr><td colspan="3">Total incl. delivery</td><td class="n total" id="farmGrand">₱0</td></tr>
-      </tfoot>
-    </table></div>
-    <p class="hint">Qty sold uses the actual packed amount once an item is marked packed.</p>
-    <h2>Orders</h2>
-    <div id="farmOrders" class="panel"></div>
-  </section>
+  deleteRecord: async (id) => {
+    await supabase.from("sales_records").delete().eq("id", id);
+  },
+  getRecordsByStore: async (store) => {
+    const { data } = await supabase.from("sales_records").select("*").eq("store", store).order("date", { ascending: false });
+    return (data || []).map(mapRecord);
+  },
+  getRecordsByMonth: async (year, month) => {
+    const lastDay = new Date(year, month, 0).getDate();
+    const start = `${year}-${String(month).padStart(2, "0")}-01`;
+    const end = `${year}-${String(month).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+    const { data } = await supabase.from("sales_records").select("*").gte("date", start).lte("date", end).order("date");
+    return (data || []).map(mapRecord);
+  },
+  getSubmitted: async () => {
+    const { data } = await supabase.from("sales_records").select("*").eq("status", "submitted").order("submitted_at");
+    return (data || []).map(mapRecord);
+  },
+  getTodayDraft: async (store) => {
+    const phNow = new Date(Date.now() + 8 * 60 * 60 * 1000);
+    const today = phNow.toISOString().split("T")[0];
+    const { data } = await supabase.from("sales_records")
+      .select("*, daily_lists(*)")
+      .eq("store", store)
+      .eq("status", "draft")
+      .eq("date", today)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (!data) return null;
+    // If draft has no valid list, still return it so user can submit
+    return { ...mapRecord(data), list: data.daily_lists };
+  },
+  getPendingCount: async () => {
+    const { count } = await supabase.from("sales_records").select("*", { count: "exact", head: true }).eq("status", "submitted");
+    return count || 0;
+  },
+  // Staff
+  getStaff: async (store) => {
+    const { data } = await supabase.from("staff").select("*").eq("store", store).order("name");
+    return data || [];
+  },
+  addStaff: async (name, store) => {
+    const { data } = await supabase.from("staff").insert({ name, store }).select().single();
+    return data;
+  },
+  deleteStaff: async (id) => {
+    await supabase.from("staff").delete().eq("id", id);
+  },
+};
 
-  <!-- ADMIN -->
-  <section class="panel" id="p-admin" hidden>
-    <div class="row">
-      <label class="f" for="adminRound">Delivery<select id="adminRound" class="roundSel"></select></label>
-      <button type="button" id="toggleOpen"></button>
-      <button type="button" id="makeLive" class="primary">Show this form to customers</button>
-      <button type="button" id="editRound">Edit this form</button>
-      <button type="button" id="delRound" class="danger">Delete this form</button>
-      <button type="button" class="link" data-lockout="admin">Lock</button>
-    </div>
-    <p class="hint" id="liveNote"></p>
-    <h2>Deliveries &amp; billing</h2>
-    <p class="hint" id="feeNote"></p>
-    <div class="tbl"><table>
-      <thead><tr><th>Customer</th><th class="n">Amount due</th><th>Payment</th><th></th></tr></thead>
-      <tbody id="billBody"></tbody>
-      <tfoot id="billFoot"></tfoot>
-    </table></div>
-    <div id="invHead" class="panel" hidden>
-      <h2>Invoices</h2>
-      <p class="hint">One box per customer. Take one screenshot of a box and send it to that customer.</p>
-    </div>
-    <div id="invoices" class="inv-list"></div>
-
-    <div class="card" id="editorCard">
-      <div class="cardhead"><h2 id="editTitle">Create a new order form</h2>
-        <button type="button" id="copyCurrent">Load current list</button></div>
-      <div id="pasteArea" class="panel">
-        <p class="hint">One item per line: "quantity kg name price/kg" or "name price/100g". A quantity sets the stock limit; items without one are unlimited.</p>
-        <textarea id="listText" placeholder="20 kg bokchoy   120/kg&#10;Thai Basil   50/100g"></textarea>
-        <div class="row"><button type="button" id="parseBtn">Load into table</button></div>
-      </div>
-      <p class="hint" id="editHint" hidden>Fix names, prices, stock or the delivery date, then press "Save changes". New names and prices also update the orders already placed and their invoices.</p>
-      <div class="tbl"><table>
-        <thead><tr><th>Vegetable</th><th class="n">Stock (kg)</th><th class="n">Price (₱)</th><th>Unit</th><th></th></tr></thead>
-        <tbody id="editBody"></tbody>
-      </table></div>
-      <div class="row">
-        <button type="button" id="addRow">+ Add row</button>
-        <label class="f" for="newDate">Delivery date<input type="date" id="newDate"></label>
-        <button type="button" class="primary" id="publishRound">Publish this order form</button>
-        <button type="button" id="cancelEdit" hidden>Cancel editing</button>
-      </div>
-      <div id="editMsg" hidden></div>
-    </div>
-
-    <div class="card" id="pwCard" hidden>
-      <h2>Passwords</h2>
-      <p class="hint">Leave a field blank to keep its current password.</p>
-      <div class="row">
-        <label class="f" for="newFarmerPw">New farmer password<input id="newFarmerPw" type="text" autocomplete="off"></label>
-        <label class="f" for="newAdminPw">New admin password<input id="newAdminPw" type="text" autocomplete="off"></label>
-        <button type="button" class="primary" id="savePw">Save passwords</button>
-      </div>
-      <div id="pwMsg" hidden></div>
-    </div>
-  </section>
-</div>
-
-<script>
-/* ===== Supabase connection: paste your project's values here ===== */
-const SUPABASE_URL = "https://vwrlhmblnxlqqbrjajzc.supabase.co";
-const SUPABASE_KEY = "sb_publishable_WP8YJQVJLZqyK_y0DyaRHg_bQQLhUkK";
-/* ================================================================= */
-(() => {
-const $ = id => document.getElementById(id);
-const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-const peso = n => "₱" + (Math.round(n*100)/100).toLocaleString("en-PH",{minimumFractionDigits:0,maximumFractionDigits:2});
-const r3 = n => Math.round(n*1000)/1000;
-const OPTS_KG = [[2,"2 kg"],[1.5,"1.5 kg"],[1,"1 kg"],[0.75,"3/4 kg"],[0.5,"1/2 kg"],[0.25,"1/4 kg"]];
-const OPTS_G  = [[0.1,"100 g"],[0.2,"200 g"],[0.3,"300 g"],[0.5,"500 g"]];
-const fmtDate = d => { try{ return new Date(d+"T00:00:00").toLocaleDateString("en-PH",{weekday:"short",month:"short",day:"numeric",year:"numeric"}); }catch{ return d; } };
-const qtyText = (unit, kg) => kg == null ? "—" : (unit === "100g" || kg < 1) ? Math.round(kg*1000) + " g" : r3(kg) + " kg";
-const priceText = it => peso(it.price) + (it.unit === "100g" ? "/100g" : "/kg");
-const lineAmt = (unit, price, kg) => unit === "100g" ? price * kg * 10 : price * kg;
-const effKg = l => (l.packed && l.actualKg != null) ? +l.actualKg : +l.qtyKg;
-
-const configured = /^https:\/\//.test(SUPABASE_URL) && !/PASTE_/.test(SUPABASE_KEY);
-async function rpc(fn, args){
-  const res = await fetch(`${SUPABASE_URL.replace(/\/$/,"")}/rest/v1/rpc/${fn}`, {
-    method:"POST", headers:{"apikey":SUPABASE_KEY, "Content-Type":"application/json"}, body:JSON.stringify(args||{})
-  });
-  const text = await res.text();
-  let data = null; try{ data = text ? JSON.parse(text) : null; }catch{ data = text; }
-  if(!res.ok){ const e = new Error(data?.message || res.statusText || "Request failed"); e.wrongPw = data?.message === "wrong_password"; throw e; }
-  return data;
-}
-function showStatus(t, err){ const s=$("status"); if(!t){s.hidden=true;return;} s.textContent=t; s.className="msg"+(err?" err":""); s.hidden=false; }
-
-/* ---------- state ---------- */
-let form = {round:null, used:{}};          // customer view
-let rounds = {}, currentId = null, orders = []; // staff view
-let staffLoaded = false, viewRoundId = null, builtFormFor = undefined;
-
-/* ---------- passwords (kept only for this browser tab) ---------- */
-let pw = {farmer:"", admin:""};
-try{ pw = Object.assign(pw, JSON.parse(sessionStorage.getItem("richann-pw")||"{}")); }catch{}
-const savePw = () => { try{ sessionStorage.setItem("richann-pw", JSON.stringify(pw)); }catch{} };
-const isUnlocked = role => role==="admin" ? !!pw.admin : !!(pw.farmer || pw.admin);
-const staffPw = () => pw.admin || pw.farmer;
-function lockAll(){ pw = {farmer:"", admin:""}; savePw(); staffLoaded=false; showTab(); }
-
-$("lockForm").addEventListener("submit", async e => {
-  e.preventDefault();
-  const role = tab(), p = $("lockPw").value, err = $("lockErr");
-  err.hidden = true;
-  if(!p){ err.textContent="Enter the password."; err.hidden=false; return; }
-  try{
-    const ok = await rpc("check_password", {p_role:role, p_pw:p});
-    if(!ok){ err.textContent = "That password is not correct."; err.hidden=false; $("lockPw").select(); return; }
-    pw[role] = p; savePw(); $("lockPw").value=""; showTab(); loadStaff();
-  }catch(x){ err.textContent = "Could not check the password: " + x.message; err.hidden=false; }
-});
-document.querySelectorAll("[data-lockout]").forEach(b => b.addEventListener("click", () => {
-  if(b.dataset.lockout==="admin") pw = {farmer:"", admin:""}; else pw.farmer = "";
-  savePw(); showTab();
-}));
-
-/* ---------- tabs ---------- */
-function tab(){ const t=(location.hash||"#order").slice(1); return ["order","farmer","admin"].includes(t) ? t : "order"; }
-function showTab(){
-  const t=tab();
-  document.querySelectorAll("nav a").forEach(a=>a.setAttribute("aria-current", a.dataset.tab===t?"page":"false"));
-  const locked = t!=="order" && !isUnlocked(t);
-  $("p-order").hidden = t!=="order";
-  $("p-farmer").hidden = t!=="farmer" || locked;
-  $("p-admin").hidden = t!=="admin" || locked;
-  $("p-lock").hidden = !locked;
-  if(locked){ $("lockTitle").textContent = t==="admin" ? "Admin access" : "Farmer access"; $("lockErr").hidden=true; setTimeout(()=>$("lockPw").focus(),0); }
-  if(t==="order") loadForm(); else if(!locked) loadStaff();
-  renderAll();
-}
-window.addEventListener("hashchange", showTab);
-
-/* ---------- loading ---------- */
-async function loadForm(){
-  if(!configured) return;
-  try{ form = await rpc("get_form"); if(!form.used) form.used = {}; showStatus(""); renderAll(); }
-  catch(e){ showStatus("Can't load the order form: " + e.message, true); }
-}
-async function loadStaff(){
-  if(!configured || !staffPw()) return;
-  try{
-    const d = await rpc("staff_data", {p_pw: staffPw()});
-    rounds = {}; (d.rounds||[]).forEach(r => rounds[r.id] = r);
-    currentId = d.current; orders = d.orders || []; staffLoaded = true; showStatus(""); renderAll();
-  }catch(e){ if(e.wrongPw){ lockAll(); } else showStatus("Can't load orders: " + e.message, true); }
-}
-async function act(fn, args){
-  try{ await rpc(fn, Object.assign({p_pw: fn.startsWith("admin_") ? pw.admin : staffPw()}, args)); }
-  catch(e){ if(e.wrongPw){ lockAll(); return; } showStatus("Could not save: " + e.message, true); }
-  loadStaff();
-}
-
-/* ---------- helpers ---------- */
-const roundOrders = rid => orders.filter(o => o.roundId === rid);
-function usedKg(rid, itemId){ let s=0; for(const o of roundOrders(rid)) for(const l of o.lines||[]) if(l.itemId===itemId) s+=effKg(l); return r3(s); }
-function availKg(rid, it){ return it.limitKg == null ? null : r3(Math.max(0, it.limitKg - usedKg(rid, it.id))); }
-function formAvail(it){ return it.limitKg == null ? null : r3(Math.max(0, it.limitKg - (+form.used[it.id] || 0))); }
-function orderSub(o){ return (o.lines||[]).reduce((s,l)=>s+lineAmt(l.unit,l.price,effKg(l)),0); }
-const custKey = o => String(o.customer||"").trim().toLowerCase();
-function customerGroups(rid){
-  const m = new Map();
-  for(const o of roundOrders(rid)){ const k=custKey(o); if(!m.has(k)) m.set(k,{key:k, name:o.customer.trim(), orders:[]}); m.get(k).orders.push(o); }
-  return [...m.values()];
-}
-const roundFee = rid => +(rounds[rid]?.deliveryFee || 0);
-function feeShare(rid){ const n=customerGroups(rid).length; return n ? Math.round(roundFee(rid)/n*100)/100 : 0; }
-
-/* ---------- quantity table (used by the order form and "my order" edit) ---------- */
-function mountQty(tbody, items, prefix, getAvail, isOpen, onTotal){
-  const vals = {};
-  tbody.innerHTML = items.map(it => {
-    const opts = (it.unit==="100g"?OPTS_G:OPTS_KG).map(([v,l])=>`<option value="${v}">${l}</option>`).join("");
-    const manual = it.unit==="100g" ? `Other (type grams)` : `Over 2 kg (type amount)`;
-    const mUnit = it.unit==="100g" ? "g" : "kg";
-    const mAttr = it.unit==="100g" ? `min="100" step="50"` : `min="2" step="0.25"`;
-    return `<tr data-id="${esc(it.id)}">
-      <td><b>${esc(it.name)}</b></td>
-      <td class="n">${priceText(it)}</td>
-      <td class="n" data-avail></td>
-      <td><select id="${prefix}q-${esc(it.id)}" aria-label="${esc(it.name)} quantity"><option value="">—</option>${opts}<option value="manual">${manual}</option></select>
-        <span class="manual" hidden><input type="number" id="${prefix}m-${esc(it.id)}" class="num" ${mAttr} aria-label="${esc(it.name)} amount">${mUnit}</span></td>
-      <td class="n" data-sub>—</td></tr>`;
-  }).join("");
-  const rows = {};
-  tbody.querySelectorAll("tr[data-id]").forEach(tr => {
-    const id = tr.dataset.id, it = items.find(i=>i.id===id);
-    const sel = tr.querySelector("select"), man = tr.querySelector(".manual"), inp = man.querySelector("input");
-    rows[id] = {tr, it, sel, man, inp};
-    const read = () => {
-      let kg = null;
-      if(sel.value==="manual"){ const v=parseFloat(inp.value); if(v>0) kg = it.unit==="100g" ? v/1000 : v; }
-      else if(sel.value) kg = parseFloat(sel.value);
-      if(kg) vals[id]=r3(kg); else delete vals[id];
-      refresh();
-    };
-    sel.addEventListener("change", () => { man.hidden = sel.value!=="manual"; if(sel.value==="manual") inp.focus(); read(); });
-    inp.addEventListener("input", read);
-  });
-  function refresh(){
-    let total = 0;
-    for(const {tr, it, sel} of Object.values(rows)){
-      const av = getAvail(it), q = vals[it.id];
-      const cell = tr.querySelector("[data-avail]");
-      if(av==null) cell.innerHTML = `<span class="pill wait">In stock</span>`;
-      else if(av<=0) cell.innerHTML = `<span class="pill low">Sold out</span>`;
-      else cell.innerHTML = `<span class="${av<=1?"pill low":""}">${qtyText(it.unit,av)}</span>`;
-      tr.classList.toggle("out", av!=null && av<=0 && !q);
-      sel.disabled = ((av!=null && av<=0) && !q) || !isOpen();
-      sel.querySelectorAll("option").forEach(o => { const v=parseFloat(o.value); if(!isNaN(v)) o.disabled = av!=null && v>av+1e-9; });
-      const sub = q ? lineAmt(it.unit,it.price,q) : 0; total += sub;
-      tr.querySelector("[data-sub]").textContent = q ? peso(sub) : "—";
-    }
-    onTotal(total);
-  }
-  function set(id, kg){
-    const row = rows[id]; if(!row || !kg) return;
-    const opt = [...row.sel.options].find(o => Math.abs(parseFloat(o.value) - kg) < 1e-6);
-    if(opt){ row.sel.value = opt.value; row.man.hidden = true; }
-    else { row.sel.value = "manual"; row.man.hidden = false; row.inp.value = row.it.unit==="100g" ? Math.round(kg*1000) : r3(kg); }
-    vals[id] = r3(kg);
-  }
-  function lines(err){
-    const out = [];
-    for(const {it} of Object.values(rows)){
-      const q = vals[it.id]; if(!q) continue;
-      if(it.unit==="100g" && q < 0.1){ err(`${it.name}: the minimum order is 100 g.`); return null; }
-      const av = getAvail(it);
-      if(av!=null && q > av+1e-9){ err(`${it.name}: only ${qtyText(it.unit,av)} left. Please lower the quantity.`); return null; }
-      out.push({itemId:it.id, qtyKg:q});
-    }
-    return out;
-  }
-  refresh();
-  return {vals, set, refresh, lines};
-}
-
-/* ---------- ORDER FORM ---------- */
-let orderQty = null;
-function buildOrderForm(){
-  const r = form.round; builtFormFor = r ? r.id : null; orderQty = null;
-  if(!r){ $("orderBody").innerHTML = `<tr><td colspan="5" class="empty">No order form yet. The farm will post this week's vegetables soon.</td></tr>`; $("mySec").hidden = true; return; }
-  orderQty = mountQty($("orderBody"), r.items, "o", formAvail, () => !!form.round?.open, t => $("orderTotal").textContent = peso(t));
-  updateOrderForm();
-}
-function updateOrderForm(){
-  const r = form.round; if(!r) return;
-  orderQty?.refresh();
-  $("orderBtn").disabled = !r.open;
-  if(!r.open) showOrderErr("Orders for this delivery are closed.");
-  renderMy();
-}
-function showOrderErr(t){ const e=$("orderErr"); e.textContent=t||""; e.hidden=!t; }
-
-$("orderForm").addEventListener("submit", async ev => {
-  ev.preventDefault(); showOrderErr("");
-  const r = form.round;
-  if(!r || !r.open){ showOrderErr("Orders are closed right now."); return; }
-  const name = $("custName").value.trim();
-  if(!name){ showOrderErr("Please enter your name."); $("custName").focus(); return; }
-  const lines = orderQty.lines(showOrderErr); if(!lines) return;
-  if(!lines.length){ showOrderErr("Please choose at least one vegetable."); return; }
-  $("orderBtn").disabled = true;
-  try{
-    const res = await rpc("place_order", {p_customer:name, p_lines:lines});
-    const tot = res.lines.reduce((s,l)=>s+lineAmt(l.unit,l.price,+l.qtyKg),0);
-    $("orderDone").innerHTML = `<div class="msg ok"><b>Thank you, ${esc(name)}! Your order is in.</b><br>${res.lines.map(l=>`${esc(l.name)} ${qtyText(l.unit,+l.qtyKg)}`).join(", ")}<br>Total ${peso(tot)} (delivery fee not included)<br>You can check or change it any time under "Check or change my order".</div><div><button type="button" id="again">Place another order</button></div>`;
-    $("orderDone").hidden=false; $("orderForm").hidden=true;
-    $("again").onclick = () => { $("orderDone").hidden=true; $("orderForm").hidden=false; $("custName").value=""; builtFormFor=undefined; loadForm(); };
-    myName = name; my = null; myMode = "view";
-    await loadForm(); loadMy();
-  }catch(e){ showOrderErr(e.message); loadForm(); }
-  finally{ $("orderBtn").disabled = false; }
+const mapRecord = (r) => ({
+  ...r, listId: r.list_id, onlinePayments: r.online_payments || [],
+  startingCash: r.starting_cash, submittedAt: r.submitted_at, confirmedAt: r.confirmed_at,
+  recorderName: r.recorder_name,
 });
 
-/* ---------- CHECK OR CHANGE MY ORDER ---------- */
-let myName = "", my = null, myMode = "view", myEdit = null, myConfirmCancel = false, myFlash = "";
-const sameName = (a,b) => String(a||"").trim().toLowerCase() === String(b||"").trim().toLowerCase();
-function fillMyNames(){
-  const s = $("myName"), names = form.names || [];
-  $("mySec").hidden = !form.round;
-  if(document.activeElement === s) return;
-  const cur = names.find(n => sameName(n, myName)) || "";
-  s.innerHTML = `<option value="">${names.length ? "Choose your name" : "No orders yet"}</option>` + names.map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join("");
-  s.value = cur;
-  if(!cur && myName && my){ my = null; myName = ""; }
+// ── Calc helpers ──────────────────────────────────────────────────────────────
+const todayStr = () => new Date().toISOString().split("T")[0];
+const fmtDate = (d) => new Date(d + "T00:00:00").toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" });
+const fmtTime = (iso) => {
+  if (!iso) return "";
+  return new Date(iso).toLocaleString("en-PH", {
+    month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
+    timeZone: "Asia/Manila"
+  });
+};
+const currency = (n) => `₱${Number(n || 0).toLocaleString("en-PH", { minimumFractionDigits: 0 })}`;
+const calcLO = (item) => {
+  // L/O = today's stock - full price sales - 5% sales - same-day 50% sales (day-off mode only)
+  return Math.max(0, (item.qty || 0) - (item.soldFull || 0) - (item.sold5 || 0) - (item.soldToday50 || 0));
+};
+const calcWaste = (item) => Math.max(0, (item.stock50 || 0) - (item.sold50 || 0));
+// stock50 already = yesterday + today in day-off mode, so waste formula stays the same
+const calcItemTotal = (item, isToyota) =>
+  (item.soldFull || 0) * item.price +
+  (isToyota ? (item.sold5 || 0) * item.price * 0.95 : 0) +
+  (isToyota ? (item.sold50 || 0) * item.price * 0.50 : 0) +
+  (isToyota ? (item.soldToday50 || 0) * item.price * 0.50 : 0);
+const calcTotals = (record) => {
+  const isToyota = record.store === "toyota";
+  const totalSales = (record.items || []).reduce((s, i) => s + calcItemTotal(i, isToyota), 0);
+  const onlineTotal = (record.onlinePayments || []).reduce((s, p) => s + (Number(p.amount) || 0), 0);
+  const endingCash = (record.startingCash || 0) + totalSales - (record.expenses || 0) - onlineTotal;
+  return { totalSales, onlineTotal, endingCash };
+};
+
+// ── Styles ────────────────────────────────────────────────────────────────────
+const P = {
+  bg: "#0f0e11", surface: "#1a1820", card: "#221f2a", border: "#2e2a38",
+  accent: "#f5a623", text: "#f0eaf8", muted: "#7a7189",
+  green: "#4ade80", red: "#f87171", blue: "#60a5fa",
+  orange: "#fb923c", purple: "#a78bfa", toyota: "#e74c3c", aws: "#f39c12",
+};
+const S = {
+  app: { minHeight: "100vh", background: P.bg, color: P.text, fontFamily: "'DM Sans','Segoe UI',sans-serif" },
+  hdr: { background: P.surface, borderBottom: `1px solid ${P.border}`, padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, zIndex: 10 },
+  sec: { padding: "14px 14px 40px" },
+  card: { background: P.card, border: `1px solid ${P.border}`, borderRadius: 12, padding: "16px" },
+  inp: { background: P.surface, border: `1px solid ${P.border}`, borderRadius: 8, color: P.text, padding: "9px 12px", fontSize: 14, width: "100%", boxSizing: "border-box", outline: "none" },
+  lbl: { fontSize: 11, color: P.muted, fontWeight: 700, marginBottom: 4, display: "block", textTransform: "uppercase", letterSpacing: "0.05em" },
+  row: { display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" },
+  col: { flex: 1, minWidth: 0 },
+  tw: { overflowX: "auto" },
+  th: { background: P.surface, color: P.muted, fontSize: 10, fontWeight: 700, textTransform: "uppercase", padding: "7px 8px", textAlign: "center", whiteSpace: "nowrap" },
+  td: { padding: "6px 8px", borderBottom: `1px solid ${P.border}`, fontSize: 13, textAlign: "center" },
+  sb: { background: P.surface, border: `1px solid ${P.border}`, borderRadius: 10, padding: "12px 14px", marginTop: 10 },
+  pill: (c) => ({ background: c + "22", color: c, border: `1px solid ${c}44`, borderRadius: 20, padding: "3px 10px", fontSize: 12, fontWeight: 600, display: "inline-block" }),
+  btn: (v = "primary") => ({
+    background: v === "primary" ? P.accent : v === "danger" ? P.red : v === "success" ? P.green : v === "ghost" ? "transparent" : P.card,
+    color: v === "primary" || v === "success" ? "#111" : v === "danger" ? "#fff" : P.text,
+    border: v === "ghost" ? `1px solid ${P.border}` : "none",
+    borderRadius: 8, padding: "9px 16px", fontWeight: 600, fontSize: 14, cursor: "pointer",
+  }),
+};
+
+// ── Loading spinner ───────────────────────────────────────────────────────────
+function Spinner() {
+  return <div style={{ textAlign: "center", padding: 40, color: P.muted, fontSize: 14 }}>Loading...</div>;
 }
-$("myName").addEventListener("change", () => { myFlash = ""; myName = $("myName").value; my = null; myMode = "view"; myConfirmCancel = false; renderMy(); loadMy(); });
-async function loadMy(){
-  if(!myName) return;
-  try{ my = await rpc("customer_order", {p_name: myName}); }
-  catch(e){ my = {error: e.message}; }
-  renderMy();
+
+function Stepper({ value, onChange, min = 0, max, color = P.accent }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 4, justifyContent: "center" }}>
+      <button onClick={() => onChange(Math.max(min, value - 1))}
+        style={{ width: 30, height: 30, borderRadius: 6, background: P.surface, border: `1px solid ${P.border}`, color: P.text, fontSize: 18, cursor: "pointer" }}>−</button>
+      <span style={{ minWidth: 28, textAlign: "center", fontWeight: 700, color, fontSize: 14 }}>{value}</span>
+      <button onClick={() => onChange(max !== undefined ? Math.min(max, value + 1) : value + 1)}
+        style={{ width: 30, height: 30, borderRadius: 6, background: P.surface, border: `1px solid ${P.border}`, color: P.text, fontSize: 18, cursor: "pointer" }}>+</button>
+    </div>
+  );
 }
-function myMine(){ const m = {}; for(const l of my?.lines||[]) m[l.itemId] = +l.qtyKg; return m; }
-function renderMy(){
-  fillMyNames();
-  const v = $("myView");
-  if(!myName){ v.innerHTML = myFlash ? `<div class="msg ok">${esc(myFlash)}</div>` : `<p class="hint">Pick your name to see what you ordered.</p>`; return; }
-  if(!my){ v.innerHTML = `<p class="hint">Loading…</p>`; return; }
-  if(my.error){ v.innerHTML = `<div class="msg err">${esc(my.error)}</div>`; return; }
-  if(!my.lines?.length){ v.innerHTML = `<p class="hint">No order found for this name.</p>`; return; }
-  if(myMode === "edit") return; // the edit table is already on screen
-  let tot = 0;
-  const rows = my.lines.map(l => { const kg = l.packed ? +l.actualKg : +l.qtyKg; const a = lineAmt(l.unit,l.price,kg); tot += a;
-    return `<tr><td>${esc(l.name)}</td><td class="n">${qtyText(l.unit,kg)}</td><td class="n">${priceText(l)}</td><td class="n">${peso(a)}</td></tr>`; }).join("");
-  const canEdit = !my.locked && form.round?.open;
-  v.innerHTML = `<div class="msg ok"><b>We have your order, ${esc(my.customer)}.</b></div>
-    <div class="tbl"><table><thead><tr><th>Vegetable</th><th class="n">Qty</th><th class="n">Price</th><th class="n">Subtotal</th></tr></thead>
-    <tbody>${rows}</tbody><tfoot><tr><td colspan="3">Total (delivery fee not included)</td><td class="n">${peso(tot)}</td></tr></tfoot></table></div>
-    ${canEdit ? `<div class="row"><button type="button" class="primary" id="myEditBtn">Change my order</button>
-      <button type="button" class="danger" id="myCancelBtn">${myConfirmCancel ? "Confirm: cancel my whole order" : "Cancel my order"}</button></div>`
-      : `<p class="hint">${my.locked ? "The farm has started packing your order, so it can't be changed here. Please message the farm." : "Orders are closed, so changes aren't possible here."}</p>`}
-    <div id="myMsg" hidden></div>`;
-  if(canEdit){
-    $("myEditBtn").onclick = startEdit;
-    $("myCancelBtn").onclick = async () => {
-      if(!myConfirmCancel){ myConfirmCancel = true; renderMy(); return; }
-      myConfirmCancel = false; await saveMy([]);
-    };
-  }
+
+function StatusBadge({ status }) {
+  const cfg = { draft: [P.muted, "Draft"], submitted: [P.orange, "⏳ Submitted"], confirmed: [P.green, "✓ Confirmed"] };
+  const [c, label] = cfg[status] || cfg.draft;
+  return <span style={S.pill(c)}>{label}</span>;
 }
-function startEdit(){
-  myMode = "edit"; const mine = myMine();
-  $("myView").innerHTML = `<p class="hint">Change the quantities, then press Save. Choose "—" to remove an item.</p>
-    <div class="tbl"><table><thead><tr><th>Vegetable</th><th class="n">Price</th><th class="n">Available</th><th>Quantity</th><th class="n">Subtotal</th></tr></thead>
-    <tbody id="myBody"></tbody><tfoot><tr><td colspan="4">Total</td><td class="n" id="myTotal">₱0</td></tr></tfoot></table></div>
-    <div id="myErr" class="msg err" hidden></div>
-    <div class="row"><button type="button" class="primary" id="mySave">Save changes</button><button type="button" id="myBack">Back</button></div>`;
-  const avail = it => it.limitKg==null ? null : r3(formAvail(it) + (mine[it.id]||0));
-  myEdit = mountQty($("myBody"), form.round.items, "e", avail, () => !!form.round?.open, t => $("myTotal").textContent = peso(t));
-  for(const [id,kg] of Object.entries(mine)) myEdit.set(id, kg);
-  myEdit.refresh();
-  const err = t => { const e=$("myErr"); e.textContent=t; e.hidden=!t; };
-  $("myBack").onclick = () => { myMode = "view"; renderMy(); };
-  $("mySave").onclick = async () => {
-    err("");
-    const lines = myEdit.lines(err); if(!lines) return;
-    if(!lines.length){ err("Choose at least one vegetable, or go back and use \"Cancel my order\"."); return; }
-    await saveMy(lines, err);
+
+// ── PIN Screen ────────────────────────────────────────────────────────────────
+function PinScreen({ onLogin, pendingCount }) {
+  const [pin, setPin] = useState("");
+  const [error, setError] = useState(false);
+
+  const tryLogin = (p) => {
+    const found = Object.entries(PINS).find(([, v]) => v === p);
+    if (found) { setError(false); onLogin(found[0]); }
+    else { setError(true); setPin(""); }
   };
-}
-async function saveMy(lines, err){
-  try{
-    const res = await rpc("customer_update", {p_name: myName, p_lines: lines});
-    myMode = "view";
-    if(res?.cancelled){ myName = ""; my = null; myFlash = "Your order was cancelled.";
-      if(!$("orderDone").hidden){ $("orderDone").hidden = true; $("orderForm").hidden = false; $("custName").value = ""; builtFormFor = undefined; }
-      await loadForm(); return; }
-    await loadForm(); await loadMy();
-    const m = $("myMsg"); if(m){ m.className = "msg ok"; m.textContent = "Your changes are saved."; m.hidden = false; }
-  }catch(e){ if(err) err(e.message); else { await loadMy(); const m=$("myMsg"); if(m){ m.className="msg err"; m.textContent=e.message; m.hidden=false; } } }
+  const press = (k) => {
+    if (pin.length < 3) { setPin(p => p + k); }
+    else { const full = pin + k; setPin(full); tryLogin(full); }
+  };
+  const del = () => setPin(p => p.slice(0, -1));
+
+  const roles = [
+    { label: "Main Store Staff", role: "staff", hint: "Prepare daily list" },
+    { label: "Toyota Sales", role: "toyota", hint: "Record Toyota sales" },
+    { label: "AWS Sales", role: "aws", hint: "Record AWS sales" },
+    { label: "Admin", role: "admin", hint: "View reports & export" },
+  ];
+
+  return (
+    <div style={{ ...S.app, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "100vh" }}>
+      <div style={{ textAlign: "center", marginBottom: 28 }}>
+        <div style={{ fontSize: 36 }}>🍞</div>
+        <div style={{ fontSize: 22, fontWeight: 700, color: P.accent }}>Bread Sales Record</div>
+        <div style={{ fontSize: 13, color: P.muted, marginTop: 4 }}>Enter your PIN to continue</div>
+      </div>
+      <div style={{ ...S.card, width: 272, textAlign: "center" }}>
+        <div style={{ display: "flex", justifyContent: "center", gap: 10, marginBottom: 18 }}>
+          {[0, 1, 2, 3].map(i => <div key={i} style={{ width: 14, height: 14, borderRadius: "50%", background: pin.length > i ? P.accent : P.border, transition: "background 0.2s" }} />)}
+        </div>
+        {error && <div style={{ color: P.red, fontSize: 13, marginBottom: 10 }}>Incorrect PIN. Try again.</div>}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 8 }}>
+          {[1, 2, 3, 4, 5, 6, 7, 8, 9, "", 0, "⌫"].map((k, i) => (
+            <button key={i} onClick={() => k === "⌫" ? del() : k !== "" ? press(String(k)) : null}
+              style={{ background: k === "" ? "transparent" : P.surface, border: `1px solid ${k === "" ? "transparent" : P.border}`, borderRadius: 10, color: P.text, fontSize: 20, fontWeight: 600, padding: "13px 0", cursor: k === "" ? "default" : "pointer" }}>
+              {k}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div style={{ marginTop: 28, display: "flex", flexDirection: "column", gap: 8, width: 272 }}>
+        {roles.map(r => (
+          <div key={r.role} style={{ ...S.card, padding: "10px 14px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 600 }}>{r.label}</div>
+              <div style={{ fontSize: 11, color: P.muted }}>{r.hint}</div>
+            </div>
+            {r.role === "admin" && pendingCount > 0 && (
+              <span style={{ background: P.red, color: "#fff", borderRadius: "50%", width: 20, height: 20, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700 }}>{pendingCount}</span>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
 
-/* ---------- FARMER ---------- */
-function fillRoundSelects(){
-  const ids = Object.keys(rounds).sort((a,b)=>(rounds[b].date||b).localeCompare(rounds[a].date||a) || b.localeCompare(a));
-  if(!viewRoundId || !rounds[viewRoundId]) viewRoundId = currentId || ids[0] || null;
-  document.querySelectorAll(".roundSel").forEach(s => {
-    if(s.contains(document.activeElement)) return;
-    s.innerHTML = ids.map(id=>`<option value="${esc(id)}">${esc(fmtDate(rounds[id].date||id))}${id===currentId?" (live)":""}</option>`).join("") || `<option>—</option>`;
-    s.value = viewRoundId || "";
-  });
-}
-document.querySelectorAll(".roundSel").forEach(s => s.addEventListener("change", () => { viewRoundId = s.value; renderAll(); }));
+// ── Staff View ────────────────────────────────────────────────────────────────
+function StaffView() {
+  const [tab, setTab] = useState("create");
+  const [products, setProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [date, setDate] = useState(todayStr());
+  const [target, setTarget] = useState("toyota");
+  const [items, setItems] = useState([]);
+  const [sent, setSent] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [editId, setEditId] = useState(null);
+  const [editPrice, setEditPrice] = useState("");
+  const [newName, setNewName] = useState("");
+  const [newPrice, setNewPrice] = useState("");
+  const [confirmDeleteId, setConfirmDeleteId] = useState(null);
 
-function renderFarmer(){
-  const r = rounds[viewRoundId], list = roundOrders(viewRoundId);
-  if(!r){ $("farmSum").innerHTML = `<tr><td colspan="5" class="empty">${staffLoaded?"No order form yet.":"Loading…"}</td></tr>`; $("farmOrders").innerHTML=""; $("farmBill").innerHTML=""; $("farmSub").textContent=peso(0); $("farmGrand").textContent=peso(0); $("farmProgress").textContent=""; return; }
-  $("farmSum").innerHTML = r.items.map(it => {
-    let ord=0, pk=0; for(const o of list) for(const l of o.lines||[]) if(l.itemId===it.id){ ord+=+l.qtyKg; if(l.packed) pk+=effKg(l); }
-    const av = availKg(viewRoundId,it);
-    return `<tr><td>${esc(it.name)}</td><td class="n">${it.limitKg==null?"—":qtyText(it.unit,it.limitKg)}</td><td class="n">${ord?qtyText(it.unit,r3(ord)):"—"}</td><td class="n">${pk?qtyText(it.unit,r3(pk)):"—"}</td><td class="n">${av==null?"—":qtyText(it.unit,av)}</td></tr>`;
-  }).join("");
-  let billSub=0;
-  const billRows = r.items.map(it => {
-    let q=0; for(const o of list) for(const l of o.lines||[]) if(l.itemId===it.id) q+=effKg(l);
-    if(!q) return "";
-    const amt = lineAmt(it.unit,it.price,q); billSub += amt;
-    return `<tr><td>${esc(it.name)}</td><td class="n">${qtyText(it.unit,r3(q))}</td><td class="n">${priceText(it)}</td><td class="n">${peso(amt)}</td></tr>`;
-  }).join("");
-  $("farmBill").innerHTML = billRows || `<tr><td colspan="4" class="empty">Nothing sold yet.</td></tr>`;
-  const fee = roundFee(viewRoundId);
-  $("farmSub").textContent = peso(billSub);
-  if(document.activeElement !== $("farmFee")) $("farmFee").value = fee;
-  $("farmGrand").textContent = peso(billSub + fee);
-  let nL=0,nP=0;
-  $("farmOrders").innerHTML = list.length ? list.map(o => {
-    const sub = orderSub(o);
-    const rows = (o.lines||[]).map((l,i) => { nL++; if(l.packed) nP++;
-      const g = l.unit==="100g";
-      const actualVal = l.actualKg!=null ? +l.actualKg : +l.qtyKg;
-      return `<tr class="${l.packed?"packed":""}">
-        <td>${esc(l.name)}</td><td class="n">${qtyText(l.unit,+l.qtyKg)}</td>
-        <td class="n"><input type="number" class="num" id="a-${esc(o.id)}-${i}" data-o="${esc(o.id)}" data-i="${i}" value="${g?Math.round(actualVal*1000):r3(actualVal)}" min="0" step="${g?10:0.01}" aria-label="${esc(l.name)} actual amount"> ${g?"g":"kg"}</td>
-        <td class="n">${priceText(l)}</td><td class="n">${peso(lineAmt(l.unit,l.price,effKg(l)))}</td>
-        <td><button type="button" class="${l.packed?"done":""}" data-pack="${esc(o.id)}" data-i="${i}">${l.packed?"✓ Packed":"Mark packed"}</button></td></tr>`;
-    }).join("");
-    return `<div class="card"><div class="cardhead"><span class="cust">${esc(o.customer)}</span><span class="sub">Ordered ${new Date(o.createdAt).toLocaleString("en-PH",{month:"short",day:"numeric",hour:"numeric",minute:"2-digit"})}</span></div>
-      <div class="tbl"><table><thead><tr><th>Vegetable</th><th class="n">Ordered</th><th class="n">Actual</th><th class="n">Price</th><th class="n">Subtotal</th><th>Check</th></tr></thead>
-      <tbody>${rows}</tbody><tfoot><tr><td colspan="4">Total</td><td class="n">${peso(sub)}</td><td></td></tr></tfoot></table></div></div>`;
-  }).join("") : `<div class="tbl"><table><tbody><tr><td class="empty">No orders for this delivery yet.</td></tr></tbody></table></div>`;
-  $("farmProgress").textContent = nL ? `Packed ${nP} of ${nL} items` : "";
-}
-function setLine(oid, i, packed, actualKg){
-  const o = orders.find(x=>x.id===oid); if(!o) return;
-  o.lines[i] = {...o.lines[i], packed, actualKg}; renderAll();
-  act("farmer_update_line", {p_order:oid, p_index:i, p_packed:packed, p_actual:actualKg});
-}
-$("farmOrders").addEventListener("click", e => {
-  const b = e.target.closest("button[data-pack]"); if(!b) return;
-  const oid=b.dataset.pack, i=+b.dataset.i, o=orders.find(x=>x.id===oid), l=o.lines[i];
-  const v = parseFloat($(`a-${oid}-${i}`).value);
-  const kg = isNaN(v) ? +l.qtyKg : r3(l.unit==="100g" ? v/1000 : v);
-  setLine(oid, i, !l.packed, kg);
-});
-$("farmOrders").addEventListener("change", e => {
-  const inp = e.target.closest("input[data-o]"); if(!inp) return;
-  const o = orders.find(x=>x.id===inp.dataset.o), i=+inp.dataset.i, l=o.lines[i];
-  const v = parseFloat(inp.value); if(isNaN(v)||v<0) return;
-  setLine(o.id, i, !!l.packed, r3(l.unit==="100g" ? v/1000 : v));
-});
-$("farmFee").addEventListener("change", () => {
-  const r = rounds[viewRoundId]; const v = parseFloat($("farmFee").value);
-  if(!r || isNaN(v) || v<0) return;
-  r.deliveryFee = v; renderAll();
-  act("farmer_set_fee", {p_round:viewRoundId, p_fee:v});
-});
+  const loadProducts = useCallback(async () => {
+    setLoading(true);
+    const prods = await api.getProducts();
+    setProducts(prods);
+    setItems(prods.map(p => ({ ...p, qty: 0, selected: false })));
+    setLoading(false);
+  }, []);
 
-/* ---------- ADMIN ---------- */
-let confirmDel = null;
-function renderAdmin(){
-  const r = rounds[viewRoundId];
-  const tb = $("toggleOpen");
-  tb.hidden = !r;
-  if(r){ tb.textContent = r.open ? "Close orders" : "Reopen orders"; tb.className = r.open ? "" : "primary"; }
-  $("makeLive").hidden = !r || viewRoundId === currentId;
-  $("delRound").hidden = !r; $("editRound").hidden = !r;
-  const nOrd = roundOrders(viewRoundId).length;
-  $("delRound").textContent = confirmRoundDel === viewRoundId
-    ? (nOrd ? `Confirm: delete form and its ${nOrd} order${nOrd>1?"s":""}` : "Confirm delete")
-    : "Delete this form";
-  $("liveNote").textContent = !r ? "" : viewRoundId === currentId
-    ? "Customers see this form now."
-    : "Customers do not see this form. Press \"Show this form to customers\" to switch.";
-  $("pwCard").hidden = false;
-  const groups = customerGroups(viewRoundId), share = feeShare(viewRoundId), fee = roundFee(viewRoundId);
-  $("feeNote").textContent = groups.length ? `Delivery fee from farmer ${peso(fee)} ÷ ${groups.length} customer${groups.length>1?"s":""} = ${peso(share)} each.` : "";
-  let T=0,U=0; const inv=[];
-  $("billBody").innerHTML = groups.length ? groups.map(g => {
-    const sub=g.orders.reduce((x,o)=>x+orderSub(o),0), tot=sub+share, paid=g.orders.every(o=>o.paid);
-    T+=tot; if(!paid) U+=tot;
-    const lines=g.orders.flatMap(o=>o.lines||[]), n=lines.length, p=lines.filter(l=>l.packed).length;
-    const k=esc(g.key);
-    inv.push(`<article class="inv">
-      <div class="inv-top"><div><div class="inv-farm">RichAnn Vegetable Farm</div><div class="inv-to">Bill to <b>${esc(g.name)}</b></div></div>
-        <div class="inv-right"><div class="inv-word">INVOICE</div><div>Delivery ${esc(fmtDate(r.date))}</div></div></div>
-      <table class="inv-t"><thead><tr><th>Item</th><th class="n">Qty</th><th class="n">Price</th><th class="n">Amount</th></tr></thead><tbody>
-      ${lines.map(l=>`<tr><td>${esc(l.name)}</td><td class="n">${qtyText(l.unit,effKg(l))}</td><td class="n">${priceText(l)}</td><td class="n">${peso(lineAmt(l.unit,l.price,effKg(l)))}</td></tr>`).join("")}
-      </tbody><tfoot>
-        <tr><td colspan="3">Subtotal</td><td class="n">${peso(sub)}</td></tr>
-        <tr><td colspan="3">Delivery fee (${peso(fee)}/${groups.length} customer${groups.length>1?"s":""})</td><td class="n">${peso(share)}</td></tr>
-        <tr class="inv-due"><td colspan="3">Total due</td><td class="n">${peso(tot)}</td></tr>
-      </tfoot></table>
-      <div class="inv-foot"><span class="pill ${paid?"ok":"low"}">${paid?"PAID":"PAYMENT DUE"}</span>${p<n?`<span class="inv-note">Packing ${p}/${n}: amounts may change</span>`:""}</div>
-    </article>`);
-    return `<tr><td><div class="cust">${esc(g.name)}</div><div class="detail">${p===n?"Packed":`Packing ${p}/${n}`}${g.orders.length>1?` · ${g.orders.length} orders`:""}</div></td>
-      <td class="n"><b>${peso(tot)}</b></td>
-      <td><button type="button" class="${paid?"done":""}" data-paid="${k}">${paid?"✓ Paid":"Mark paid"}</button></td>
-      <td><button type="button" class="danger" data-del="${k}" aria-label="Delete ${esc(g.name)}'s order">${confirmDel===g.key?"Delete?":"✕"}</button></td></tr>`;
-  }).join("") : `<tr><td colspan="4" class="empty">${staffLoaded?"No orders for this delivery yet.":"Loading…"}</td></tr>`;
-  $("billFoot").innerHTML = groups.length ? `<tr><td>Total · ${groups.length} customers</td><td class="n">${peso(T)}</td><td colspan="2">Unpaid ${peso(U)}</td></tr>` : "";
-  $("invoices").innerHTML = inv.join("");
-  $("invHead").hidden = !inv.length;
-}
-$("billBody").addEventListener("click", e => {
-  const p = e.target.closest("button[data-paid]");
-  if(p){ const g=customerGroups(viewRoundId).find(x=>x.key===p.dataset.paid); if(!g) return;
-    const v=!g.orders.every(o=>o.paid); g.orders.forEach(o=>o.paid=v); renderAll();
-    act("admin_set_paid", {p_ids:g.orders.map(o=>o.id), p_paid:v}); return; }
-  const d = e.target.closest("button[data-del]");
-  if(d){ const k=d.dataset.del; if(confirmDel!==k){ confirmDel=k; renderAdmin(); return; }
-    confirmDel=null; const g=customerGroups(viewRoundId).find(x=>x.key===k); if(!g) return;
-    const ids=g.orders.map(o=>o.id); orders=orders.filter(x=>!ids.includes(x.id)); renderAll();
-    act("admin_delete_orders", {p_ids:ids}); }
-});
-let confirmRoundDel = null;
-$("makeLive").addEventListener("click", async () => {
-  const rid = viewRoundId; if(!rounds[rid]) return;
-  currentId = rid; renderAll();
-  await act("admin_set_current", {p_round:rid});
-});
-$("delRound").addEventListener("click", async () => {
-  const rid = viewRoundId; if(!rounds[rid]) return;
-  if(confirmRoundDel !== rid){ confirmRoundDel = rid; renderAdmin(); return; }
-  confirmRoundDel = null;
-  delete rounds[rid]; orders = orders.filter(o => o.roundId !== rid); viewRoundId = null; renderAll();
-  await act("admin_delete_round", {p_round:rid});
-});
-document.querySelectorAll(".roundSel").forEach(s => s.addEventListener("change", () => { confirmRoundDel = null; }));
-$("toggleOpen").addEventListener("click", () => {
-  const r=rounds[viewRoundId]; if(!r) return; r.open=!r.open; renderAll();
-  act("admin_set_open", {p_round:viewRoundId, p_open:r.open});
-});
+  useEffect(() => { loadProducts(); }, [loadProducts]);
 
-/* list editor */
-let editRows = [], editingId = null;
-function setEditMode(){
-  const ed = !!editingId;
-  $("editTitle").textContent = ed ? `Edit order form · ${fmtDate(rounds[editingId]?.date || "")}` : "Create a new order form";
-  $("pasteArea").hidden = ed; $("copyCurrent").hidden = ed; $("editHint").hidden = !ed; $("cancelEdit").hidden = !ed;
-  $("publishRound").textContent = ed ? "Save changes" : "Publish this order form";
-}
-$("editRound").addEventListener("click", () => {
-  const r = rounds[viewRoundId]; if(!r) return;
-  editingId = viewRoundId;
-  editRows = r.items.map(it => ({id:it.id, name:it.name, limitKg: it.limitKg ?? "", price: it.price, unit: it.unit}));
-  $("newDate").value = r.date; $("editMsg").hidden = true;
-  setEditMode(); renderEdit();
-  $("editorCard").scrollIntoView({behavior:"smooth", block:"start"});
-});
-$("cancelEdit").addEventListener("click", () => { editingId = null; editRows = []; $("newDate").value = new Date(Date.now()+8*3600e3).toISOString().slice(0,10); setEditMode(); renderEdit(); });
-function parseList(text){
-  const out=[];
-  for(const raw of text.split(/\n/)){
-    const line = raw.trim(); if(!line) continue;
-    const m = line.match(/^(?:(\d+(?:\.\d+)?)\s*kg\s+)?(.+?)\s+(\d+(?:\.\d+)?)\s*\/\s*(100\s*g|kg)\s*$/i);
-    if(!m){ out.push({name:line, limitKg:"", price:"", unit:"kg", bad:true}); continue; }
-    out.push({name:m[2].trim(), limitKg:m[1]||"", price:m[3], unit:/100/.test(m[4])?"100g":"kg"});
-  }
-  return out;
-}
-function renderEdit(){
-  $("editBody").innerHTML = editRows.length ? editRows.map((r,i)=>`<tr${r.bad?' class="out"':""}>
-    <td><input id="en-${i}" data-k="name" data-i="${i}" value="${esc(r.name)}" aria-label="Vegetable name"></td>
-    <td class="n"><input id="el-${i}" class="num" type="number" min="0" step="0.5" data-k="limitKg" data-i="${i}" value="${esc(r.limitKg)}" placeholder="none" aria-label="Stock limit"></td>
-    <td class="n"><input id="ep-${i}" class="num" type="number" min="0" data-k="price" data-i="${i}" value="${esc(r.price)}" aria-label="Price"></td>
-    <td><select id="eu-${i}" data-k="unit" data-i="${i}" aria-label="Unit"><option value="kg"${r.unit==="kg"?" selected":""}>/kg</option><option value="100g"${r.unit==="100g"?" selected":""}>/100g</option></select></td>
-    <td><button type="button" class="danger" data-rm="${i}" aria-label="Remove row">✕</button></td></tr>`).join("")
-    : `<tr><td colspan="5" class="empty">Paste a list above and press "Load into table".</td></tr>`;
-}
-$("editBody").addEventListener("input", e => { const t=e.target; if(t.dataset.k){ editRows[+t.dataset.i][t.dataset.k]=t.value; editRows[+t.dataset.i].bad=false; } });
-$("editBody").addEventListener("click", e => { const b=e.target.closest("[data-rm]"); if(b){ editRows.splice(+b.dataset.rm,1); renderEdit(); } });
-$("parseBtn").onclick = () => { editRows = parseList($("listText").value); renderEdit(); };
-$("addRow").onclick = () => { editRows.push({name:"",limitKg:"",price:"",unit:"kg"}); renderEdit(); };
-$("copyCurrent").onclick = () => {
-  const r = rounds[currentId]; if(!r) return;
-  $("listText").value = r.items.map(it => `${it.limitKg!=null?it.limitKg+" kg ":""}${it.name}   ${it.price}/${it.unit}`).join("\n");
-  editRows = parseList($("listText").value); renderEdit();
-};
-$("newDate").value = new Date(Date.now()+8*3600e3).toISOString().slice(0,10);
-$("publishRound").onclick = async () => {
-  const msg=$("editMsg"), say=(t,ok)=>{msg.textContent=t;msg.className="msg "+(ok?"ok":"err");msg.hidden=false;};
-  const items=[], seen={};
-  editRows.forEach(r => { if(r.id) seen[r.id]=1; });
-  for(const r of editRows){
-    const name=String(r.name).trim(), price=parseFloat(r.price);
-    if(!name) continue;
-    if(!(price>0)) return say(`Enter a price for ${name}.`);
-    let id=r.id;
-    if(!id){ id=name.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"")||"item"; while(seen[id]) id+="-2"; seen[id]=1; }
-    const lim=parseFloat(r.limitKg);
-    items.push({id,name,price,unit:r.unit==="100g"?"100g":"kg",limitKg: lim>0?lim:null});
-  }
-  if(!items.length) return say("Add at least one vegetable.");
-  const date=$("newDate").value || new Date().toISOString().slice(0,10);
-  $("publishRound").disabled = true;
-  if(editingId){
-    try{
-      await rpc("admin_update_round", {p_pw:pw.admin, p_round:editingId, p_date:date, p_items:items});
-      viewRoundId = editingId; editingId = null; editRows = []; setEditMode(); renderEdit(); await loadStaff();
-      say("Changes saved. Customers see the new names, prices and date now.", true);
-    }catch(e){ if(e.wrongPw) lockAll(); else say("Could not save: " + e.message); }
-    finally{ $("publishRound").disabled = false; }
-    return;
-  }
-  try{
-    const rid = await rpc("admin_create_round", {p_pw:pw.admin, p_date:date, p_items:items});
-    viewRoundId = rid; await loadStaff();
-    say(`Order form for ${fmtDate(date)} is live (${items.length} items). The previous delivery is now closed.`, true);
-  }catch(e){ if(e.wrongPw) lockAll(); else say("Could not publish: " + e.message); }
-  finally{ $("publishRound").disabled = false; }
-};
+  const toggle = (i) => setItems(prev => prev.map((x, j) => j === i ? { ...x, selected: !x.selected } : x));
+  const setQty = (i, v) => setItems(prev => prev.map((x, j) => j === i ? { ...x, qty: Math.max(0, v) } : x));
 
-$("savePw").onclick = async () => {
-  const msg=$("pwMsg"), say=(t,ok)=>{msg.textContent=t;msg.className="msg "+(ok?"ok":"err");msg.hidden=false;};
-  const f=$("newFarmerPw").value.trim(), a=$("newAdminPw").value.trim();
-  if(!f && !a) return say("Type a new password first.");
-  if((f && f.length<4) || (a && a.length<4)) return say("Use at least 4 characters.");
-  try{
-    await rpc("admin_set_passwords", {p_pw:pw.admin, p_farmer:f, p_admin:a});
-    if(a){ pw.admin = a; savePw(); }
-    $("newFarmerPw").value=""; $("newAdminPw").value=""; say("Passwords saved.", true);
-  }catch(e){ if(e.wrongPw) lockAll(); else say("Could not save: " + e.message); }
-};
+  const handleSend = async () => {
+    const sel = items.filter(x => x.selected && x.qty > 0);
+    if (!sel.length) return;
+    setSending(true);
+    await api.addList(date, target, sel.map(({ name, price, qty }) => ({ name, price, qty })));
+    setSending(false);
+    setSent(true);
+  };
 
-/* ---------- render ---------- */
-function renderAll(){
-  const t = tab(), a = document.activeElement;
-  const r = t==="order" ? form.round : rounds[currentId];
-  $("roundLabel").textContent = !configured ? "Setup needed" : r ? `Delivery ${fmtDate(r.date)} · ${r.open?"Taking orders":"Orders closed"}` : "No order form yet";
-  if(t==="order"){ if(builtFormFor !== (form.round ? form.round.id : null)) buildOrderForm(); else updateOrderForm(); return; }
-  fillRoundSelects();
-  if(t==="farmer" && isUnlocked("farmer") && !(a && $("farmOrders").contains(a) && a.tagName==="INPUT")) renderFarmer();
-  if(t==="admin" && isUnlocked("admin") && !(a && $("billBody").contains(a) && a.tagName==="INPUT")) renderAdmin();
-}
-document.addEventListener("focusout", () => setTimeout(renderAll, 0));
+  const savePrice = async (id) => {
+    await api.updateProductPrice(id, Number(editPrice));
+    setEditId(null);
+    loadProducts();
+  };
 
-if(!configured){
-  showStatus("Setup needed: paste the Supabase project URL and key at the top of the script in index.html.", true);
+  const handleAddProduct = async () => {
+    if (!newName || !newPrice) return;
+    await api.addProduct(newName, Number(newPrice));
+    setNewName(""); setNewPrice("");
+    loadProducts();
+  };
+
+  const handleDeleteProduct = async (id) => {
+    await api.deleteProduct(id);
+    setConfirmDeleteId(null);
+    loadProducts();
+  };
+
+  if (sent) return (
+    <div style={{ ...S.sec, textAlign: "center", paddingTop: 60 }}>
+      <div style={{ fontSize: 48, marginBottom: 12 }}>✅</div>
+      <div style={{ fontSize: 20, fontWeight: 700, color: P.green }}>List Sent to {STORES[target]}!</div>
+      <button style={{ ...S.btn(), marginTop: 24 }} onClick={() => { setSent(false); loadProducts(); }}>Create Another</button>
+    </div>
+  );
+
+  return (
+    <div style={S.sec}>
+      <h2 style={{ margin: "0 0 14px", fontSize: 18, fontWeight: 700 }}>Main Store</h2>
+      <div style={{ display: "flex", gap: 8, marginBottom: 18 }}>
+        {[["create","📋 Create List"],["manage","🏷️ Manage Products"]].map(([id,label]) => (
+          <button key={id} onClick={() => setTab(id)} style={{ ...S.btn(tab === id ? "primary" : "ghost"), padding: "8px 14px", fontSize: 13 }}>{label}</button>
+        ))}
+      </div>
+
+      {tab === "create" && (
+        loading ? <Spinner /> : <>
+          <div style={{ ...S.row, marginBottom: 14 }}>
+            <div style={S.col}><label style={S.lbl}>Date</label><input type="date" value={date} onChange={e => setDate(e.target.value)} style={S.inp} /></div>
+            <div style={S.col}><label style={S.lbl}>Send to</label>
+              <select value={target} onChange={e => setTarget(e.target.value)} style={S.inp}>
+                <option value="toyota">Toyota Sta Rosa</option>
+                <option value="aws">AWS</option>
+              </select>
+            </div>
+          </div>
+          <div style={S.tw}>
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead><tr>
+                <th style={{ ...S.th, textAlign: "left" }}>Item</th>
+                <th style={S.th}>Price</th>
+                <th style={S.th}>Include</th>
+                <th style={S.th}>Qty to Send</th>
+              </tr></thead>
+              <tbody>
+                {items.map((item, i) => (
+                  <tr key={item.id} style={{ background: item.selected ? "#2a2060" : "transparent" }}>
+                    <td style={{ ...S.td, textAlign: "left" }}>{item.name}</td>
+                    <td style={S.td}>{currency(item.price)}</td>
+                    <td style={S.td}><input type="checkbox" checked={item.selected} onChange={() => toggle(i)} style={{ accentColor: P.accent, width: 16, height: 16 }} /></td>
+                    <td style={S.td}>{item.selected && <Stepper value={item.qty} onChange={v => setQty(i, v)} />}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p style={{ color: P.muted, fontSize: 12, marginTop: 10 }}>Need a new product or price change? Use the "Manage Products" tab above.</p>
+          <div style={{ marginTop: 18, display: "flex", justifyContent: "flex-end" }}>
+            <button onClick={handleSend} disabled={sending} style={{ ...S.btn(), opacity: sending ? 0.6 : 1 }}>
+              {sending ? "Sending..." : `Send to ${STORES[target]} →`}
+            </button>
+          </div>
+        </>
+      )}
+
+      {tab === "manage" && (
+        loading ? <Spinner /> : <div>
+          <p style={{ color: P.muted, fontSize: 13, marginTop: 0 }}>Add, remove, or update prices. Changes apply to future lists.</p>
+          <div style={{ ...S.card, marginBottom: 16 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10, color: P.accent }}>+ Add New Product</div>
+            <div style={S.row}>
+              <div style={{ flex: 2 }}><input placeholder="Item name" value={newName} onChange={e => setNewName(e.target.value)} style={S.inp} /></div>
+              <div style={{ flex: 1 }}><input placeholder="Price" type="number" value={newPrice} onChange={e => setNewPrice(e.target.value)} style={S.inp} /></div>
+              <button onClick={handleAddProduct} style={S.btn()}>Add</button>
+            </div>
+          </div>
+          {products.map((p) => (
+            <div key={p.id} style={{ ...S.card, marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+              <span style={{ fontSize: 14, fontWeight: 500, flex: 1 }}>{p.name}</span>
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                {editId === p.id
+                  ? <>
+                    <input type="number" value={editPrice} onChange={e => setEditPrice(e.target.value)} style={{ ...S.inp, width: 80, padding: "5px 8px" }} autoFocus />
+                    <button onClick={() => savePrice(p.id)} style={{ ...S.btn(), padding: "6px 12px", fontSize: 12 }}>Save</button>
+                    <button onClick={() => setEditId(null)} style={{ ...S.btn("ghost"), padding: "6px 12px", fontSize: 12 }}>Cancel</button>
+                  </>
+                  : <button onClick={() => { setEditId(p.id); setEditPrice(p.price); }} style={{ background: "none", border: `1px solid ${P.border}`, borderRadius: 8, color: P.accent, padding: "5px 12px", cursor: "pointer", fontWeight: 700 }}>{currency(p.price)}</button>
+                }
+                {confirmDeleteId === p.id
+                  ? <>
+                    <span style={{ fontSize: 11, color: P.red }}>Delete?</span>
+                    <button onClick={() => handleDeleteProduct(p.id)} style={{ ...S.btn("danger"), padding: "5px 10px", fontSize: 11 }}>Yes</button>
+                    <button onClick={() => setConfirmDeleteId(null)} style={{ ...S.btn("ghost"), padding: "5px 10px", fontSize: 11 }}>No</button>
+                  </>
+                  : <button onClick={() => setConfirmDeleteId(p.id)} style={{ background: "none", border: `1px solid ${P.red}44`, borderRadius: 7, color: P.red, padding: "5px 10px", fontSize: 11, cursor: "pointer" }}>🗑</button>
+                }
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
-renderEdit(); showTab();
-// refresh every 20 seconds so stock and orders stay current
-setInterval(() => { if(document.hidden) return; if(tab()==="order") loadForm(); else if(isUnlocked(tab())) loadStaff(); }, 20000);
-})();
-</script>
-</body>
-</html>
+
+// ── Seller View ───────────────────────────────────────────────────────────────
+function SellerView({ role, onRecordChange }) {
+  const isToyota = role === "toyota";
+  const storeColor = role === "toyota" ? P.toyota : P.aws;
+
+  const [view, setView] = useState("menu");
+  const [selectedList, setSelectedList] = useState(null);
+  const [step, setStep] = useState("selectList");
+  const [items, setItems] = useState([]);
+  const [allProds, setAllProds] = useState([]);
+  const [stock50Items, setStock50Items] = useState([]);
+  const [payments, setPayments] = useState([{ ref: "", amount: "" }]);
+  const [startingCash, setStartingCash] = useState("");
+  const [expenses, setExpenses] = useState("");
+  const [draftId, setDraftId] = useState(null);
+  const [dayOffMode, setDayOffMode] = useState(false); // tomorrow is a day off
+  const [savedTotals, setSavedTotals] = useState({ totalSales: 0, onlineTotal: 0, endingCash: 0 });
+  const [submitDone, setSubmitDone] = useState(false);
+  const [confirmDeleteId, setConfirmDeleteId] = useState(null);
+  const [myLists, setMyLists] = useState([]);
+  const [myRecords, setMyRecords] = useState([]);
+  const [staffList, setStaffList] = useState([]);
+  const [recorderName, setRecorderName] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [autoSaveStatus, setAutoSaveStatus] = useState("");
+  const autoSaveTimer = { current: null };
+
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    const [lists, records, prods, staff] = await Promise.all([
+      api.getLists(role), api.getRecordsByStore(role), api.getProducts(), api.getStaff(role)
+    ]);
+    setMyLists(lists);
+    setMyRecords(records);
+    setAllProds(prods);
+    setStaffList(staff);
+    setStock50Items(prods.map(p => ({ ...p, stock50: 0 })));
+    setLoading(false);
+  }, [role]);
+
+  useEffect(() => {
+    loadData();
+    // Check for today's draft to resume
+    api.getTodayDraft(role).then(draft => {
+      if (!draft) return;
+      // Load draft data even if list is missing
+      if (draft.list) setSelectedList(draft.list);
+      setItems(draft.items || []);
+      setPayments(draft.onlinePayments?.length ? draft.onlinePayments : [{ ref: "", amount: "" }]);
+      setStartingCash(String(draft.startingCash || ""));
+      setExpenses(String(draft.expenses || ""));
+      setRecorderName(draft.recorderName || "");
+      setDraftId(draft.id);
+      // Don't auto-navigate - just set draftId so "Resume" button appears in menu
+    }).catch(() => {});
+  }, [loadData, role]);
+
+  // Save on demand only
+  const [hasUserEdited, setHasUserEdited] = useState(false);
+  const [saveError, setSaveError] = useState("");
+
+  const resetAll = () => {
+    setView("menu"); setSelectedList(null); setStep("selectList");
+    setItems([]); setPayments([{ ref: "", amount: "" }]);
+    setStartingCash(""); setExpenses("");
+    setDraftId(null); setSubmitDone(false); setConfirmDeleteId(null);
+    setAutoSaveStatus(""); setRecorderName(""); setDayOffMode(false); setHasUserEdited(false);
+    setStock50Items(allProds.map(p => ({ ...p, stock50: 0 })));
+    loadData();
+  };
+
+  const selectList = async (list) => {
+    setSelectedList(list);
+    if (isToyota) {
+      setStep("stock50");
+    } else {
+      const initItems = list.items.map(i => ({ ...i, soldFull: 0 }));
+      setItems(initItems);
+      // Create draft record immediately
+      try {
+        const rec = await api.addRecord({
+          listId: list.id, store: role, date: list.date,
+          items: initItems, onlinePayments: [],
+          startingCash: 0, expenses: 0,
+        });
+        setDraftId(rec.id);
+      } catch(e) { console.error("Draft create error:", e); }
+      setStep("sales");
+    }
+  };
+
+  const goToSalesFromStock50 = async () => {
+    const merged = selectedList.items.map(i => ({
+      ...i, soldFull: 0, sold5: 0, sold50: 0, soldToday50: 0,
+      stock50: stock50Items.find(s => s.name === i.name)?.stock50 || 0,
+      dayOff: dayOffMode,
+    }));
+    stock50Items.forEach(s => {
+      if (s.stock50 > 0 && !merged.find(m => m.name === s.name)) {
+        merged.push({ name: s.name, price: s.price, qty: 0, soldFull: 0, sold5: 0, sold50: 0, soldToday50: 0, stock50: s.stock50, dayOff: dayOffMode });
+      }
+    });
+    setItems(merged);
+    try {
+      const rec = await api.addRecord({
+        listId: selectedList.id, store: role, date: selectedList.date,
+        items: merged, onlinePayments: [],
+        startingCash: 0, expenses: 0,
+      });
+      setDraftId(rec.id);
+    } catch(e) { console.error("Draft create error:", e); }
+    setStep("sales");
+  };
+
+  const updateItem = (i, field, val) => {
+    setHasUserEdited(true);
+    setItems(prev => prev.map((x, j) => j === i ? { ...x, [field]: Math.max(0, val) } : x));
+  };
+  const updateSoldToday50 = (i, val) => {
+    setHasUserEdited(true);
+    setItems(prev => prev.map((x, j) => j === i ? { ...x, soldToday50: Math.max(0, val) } : x));
+  };
+  const updateStock50 = (i, val) =>
+    setStock50Items(prev => prev.map((x, j) => j === i ? { ...x, stock50: Math.max(0, val) } : x));
+  const addPayment = () => setPayments(p => [...p, { ref: "", amount: "" }]);
+  const updPayment = (i, f, v) => { setHasUserEdited(true); setPayments(p => p.map((x, j) => j === i ? { ...x, [f]: v } : x)); };
+  const removePayment = (i) => setPayments(p => p.filter((_, j) => j !== i));
+
+  const handleSave = async () => {
+    if (!selectedList) return;
+    setSaving(true);
+    const snapItems = [...items];
+    const snapPayments = [...payments];
+    const snapCash = startingCash;
+    const snapExpenses = expenses;
+    const snapName = recorderName;
+    const currentTotals = calcTotals({
+      store: role, items: snapItems, onlinePayments: snapPayments,
+      startingCash: Number(snapCash) || 0,
+      expenses: Number(snapExpenses) || 0,
+    });
+    if (draftId) {
+      // Update existing draft
+      await supabase.from("sales_records").update({
+        items: snapItems,
+        online_payments: snapPayments.filter(p => p.ref || p.amount),
+        starting_cash: Number(snapCash) || 0,
+        expenses: Number(snapExpenses) || 0,
+        recorder_name: snapName || null,
+      }).eq("id", draftId);
+    }
+    setSavedTotals(currentTotals);
+    setSaving(false);
+    onRecordChange();
+    loadData();
+  };
+
+  const handleSubmit = async () => {
+    setSaving(true);
+    setSaveError("");
+    const snapItems = [...items];
+    const snapPayments = [...payments];
+    const snapCash = startingCash;
+    const snapExpenses = expenses;
+    const snapName = recorderName;
+    const phNow = new Date(Date.now() + 8 * 60 * 60 * 1000);
+    const phIso = phNow.toISOString().replace("Z", "+08:00");
+    const snapDate = selectedList?.date || phNow.toISOString().split("T")[0];
+    const snapListId = selectedList?.id || null;
+    const snapDraftId = draftId;
+
+    try {
+      if (snapDraftId) {
+        const { error } = await supabase.from("sales_records").update({
+          items: snapItems,
+          online_payments: snapPayments.filter(p => p.ref || p.amount),
+          starting_cash: Number(snapCash) || 0,
+          expenses: Number(snapExpenses) || 0,
+          recorder_name: snapName || null,
+          status: "submitted",
+          submitted_at: phIso,
+        }).eq("id", snapDraftId);
+        if (error) throw error;
+      } else {
+        if (!snapListId) throw new Error("No list selected. Please go back and select a list.");
+        const { error } = await supabase.from("sales_records").insert({
+          list_id: snapListId,
+          store: role,
+          date: snapDate,
+          items: snapItems,
+          online_payments: snapPayments.filter(p => p.ref || p.amount),
+          starting_cash: Number(snapCash) || 0,
+          expenses: Number(snapExpenses) || 0,
+          recorder_name: snapName || null,
+          status: "submitted",
+          submitted_at: phIso,
+        });
+        if (error) throw error;
+      }
+      setDraftId(null);
+      setSubmitDone(true);
+      onRecordChange();
+      loadData();
+    } catch (err) {
+      setSaveError("Submit failed: " + (err.message || JSON.stringify(err)));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDeleteRecord = async (id) => {
+    await api.deleteRecord(id);
+    setConfirmDeleteId(null);
+    onRecordChange();
+    loadData();
+  };
+
+  const totals = items.length
+    ? calcTotals({ store: role, items, onlinePayments: payments, startingCash: Number(startingCash) || 0, expenses: Number(expenses) || 0 })
+    : { totalSales: 0, onlineTotal: 0, endingCash: 0 };
+
+  if (view === "menu") return (
+    <div style={S.sec}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 18 }}>
+        <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>Sales Entry</h2>
+        <span style={S.pill(storeColor)}>{STORES[role]}</span>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        <div onClick={() => { setView("entry"); setStep("selectList"); }} style={{ ...S.card, border: `1px solid ${P.accent}44`, cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div><div style={{ fontWeight: 700, color: P.accent }}>📝 New Sales Record</div><div style={{ fontSize: 12, color: P.muted, marginTop: 2 }}>Enter today's sales</div></div>
+          <span style={{ color: P.accent, fontSize: 20 }}>→</span>
+        </div>
+        <div onClick={() => setView("history")} style={{ ...S.card, cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div><div style={{ fontWeight: 700 }}>📂 My Records</div><div style={{ fontSize: 12, color: P.muted, marginTop: 2 }}>{myRecords.length} records</div></div>
+          <span style={{ color: P.muted, fontSize: 20 }}>→</span>
+        </div>
+      </div>
+    </div>
+  );
+
+  if (view === "history") return (
+    <div style={S.sec}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+        <button onClick={() => { setView("menu"); setConfirmDeleteId(null); loadData(); }} style={{ ...S.btn("ghost"), padding: "6px 12px", fontSize: 13 }}>← Back</button>
+        <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>My Records</h2>
+      </div>
+      {loading ? <Spinner /> : myRecords.length === 0
+        ? <div style={{ ...S.card, textAlign: "center", padding: 40, color: P.muted }}>No records yet.</div>
+        : myRecords.map(r => {
+          const t = calcTotals(r);
+          const canDelete = r.status === "draft" || r.status === "confirmed";
+          return (
+            <div key={r.id} style={{ ...S.card, marginBottom: 10 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                <span style={{ fontWeight: 700 }}>{fmtDate(r.date)}</span>
+                <StatusBadge status={r.status} />
+              </div>
+              {r.recorderName && <div style={{ fontSize: 12, color: P.muted, marginBottom: 2 }}>👤 {r.recorderName}</div>}
+              <div style={{ fontSize: 13, color: P.muted }}>Total Sales: <span style={{ color: P.green, fontWeight: 600 }}>{currency(t.totalSales)}</span></div>
+              <div style={{ fontSize: 13, color: P.muted }}>Ending Cash: <span style={{ color: P.accent, fontWeight: 600 }}>{currency(t.endingCash)}</span></div>
+              {r.submittedAt && <div style={{ fontSize: 11, color: P.muted, marginTop: 2 }}>Submitted {fmtTime(r.submittedAt)}</div>}
+              {r.confirmedAt && <div style={{ fontSize: 11, color: P.green, marginTop: 2 }}>✓ Confirmed {fmtTime(r.confirmedAt)}</div>}
+              {r.status === "submitted" && <div style={{ fontSize: 11, color: P.muted, marginTop: 6, fontStyle: "italic" }}>Cannot delete — pending admin review.</div>}
+              {canDelete && (
+                confirmDeleteId === r.id
+                  ? <div style={{ display: "flex", gap: 8, marginTop: 10, alignItems: "center" }}>
+                    <span style={{ fontSize: 12, color: P.red, flex: 1 }}>Delete this record?</span>
+                    <button onClick={() => handleDeleteRecord(r.id)} style={{ ...S.btn("danger"), padding: "5px 12px", fontSize: 12 }}>Delete</button>
+                    <button onClick={() => setConfirmDeleteId(null)} style={{ ...S.btn("ghost"), padding: "5px 12px", fontSize: 12 }}>Cancel</button>
+                  </div>
+                  : <button onClick={() => setConfirmDeleteId(r.id)} style={{ background: "none", border: `1px solid ${P.red}44`, borderRadius: 7, color: P.red, padding: "5px 10px", fontSize: 11, marginTop: 8, cursor: "pointer" }}>🗑 Delete</button>
+              )}
+            </div>
+          );
+        })
+      }
+    </div>
+  );
+
+  if (submitDone) return (
+    <div style={{ ...S.sec, textAlign: "center", paddingTop: 60 }}>
+      <div style={{ fontSize: 48, marginBottom: 12 }}>📨</div>
+      <div style={{ fontSize: 20, fontWeight: 700, color: P.orange }}>Submitted to Admin!</div>
+      <div style={{ color: P.muted, marginTop: 8, fontSize: 13 }}>The admin will review and confirm your record.</div>
+      <div style={{ display: "flex", gap: 12, justifyContent: "center", marginTop: 24 }}>
+        <button style={S.btn("ghost")} onClick={() => { setView("history"); setSubmitDone(false); loadData(); }}>View My Records</button>
+        <button style={S.btn()} onClick={resetAll}>Done</button>
+      </div>
+    </div>
+  );
+
+
+
+  if (view === "entry" && step === "selectList") return (
+    <div style={S.sec}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+        <button onClick={() => setView("menu")} style={{ ...S.btn("ghost"), padding: "6px 12px", fontSize: 13 }}>← Back</button>
+        <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>Select Today's List</h2>
+      </div>
+      {loading ? <Spinner /> : myLists.length === 0
+        ? <div style={{ ...S.card, textAlign: "center", padding: 32, color: P.muted }}>No lists available. Ask main store staff to prepare one.</div>
+        : myLists.map(l => (
+          <div key={l.id} onClick={() => selectList(l)} style={{ ...S.card, marginBottom: 10, cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div><div style={{ fontWeight: 700 }}>{fmtDate(l.date)}</div><div style={{ fontSize: 12, color: P.muted }}>{l.items.length} items · {l.items.reduce((s, i) => s + i.qty, 0)} pcs</div></div>
+            <span style={{ color: P.accent, fontSize: 20 }}>→</span>
+          </div>
+        ))
+      }
+    </div>
+  );
+
+  if (view === "entry" && step === "stock50") return (
+    <div style={S.sec}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
+        <button onClick={() => setStep("selectList")} style={{ ...S.btn("ghost"), padding: "6px 12px", fontSize: 13 }}>← Back</button>
+        <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>50% off Stock Entry</h2>
+        <span style={S.pill(P.red)}>STEP 1</span>
+      </div>
+
+      {/* Day-off toggle */}
+      <div style={{ ...S.card, marginBottom: 14, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div>
+          <div style={{ fontWeight: 700, fontSize: 14 }}>🗓 Tomorrow is a day off</div>
+        </div>
+        <div onClick={() => setDayOffMode(m => !m)}
+          style={{ width: 48, height: 26, borderRadius: 13, background: dayOffMode ? P.accent : P.border, cursor: "pointer", position: "relative", transition: "background 0.2s" }}>
+          <div style={{ width: 20, height: 20, borderRadius: "50%", background: "#fff", position: "absolute", top: 3, left: dayOffMode ? 25 : 3, transition: "left 0.2s" }} />
+        </div>
+      </div>
+
+      <p style={{ color: P.muted, fontSize: 13, marginTop: 0, marginBottom: 14 }}>
+        Enter yesterday's leftovers as today's 50% off stock.
+      </p>
+      <div style={S.tw}>
+        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          <thead><tr>
+            <th style={{ ...S.th, textAlign: "left" }}>Item</th>
+            <th style={S.th}>Today's Stock</th>
+            <th style={{ ...S.th, color: P.red }}>50% Stock (L/O)</th>
+          </tr></thead>
+          <tbody>
+            {allProds.map((prod, i) => {
+              const inList = selectedList?.items.find(x => x.name === prod.name);
+              const todayQty = inList ? inList.qty : 0;
+              // In day-off mode: max = no limit (yesterday's L/O + today's full stock)
+              // In normal mode: max = no strict limit (yesterday's L/O, unknown)
+              return (
+                <tr key={prod.id} style={{ background: stock50Items[i]?.stock50 > 0 ? "#2a1520" : "transparent" }}>
+                  <td style={{ ...S.td, textAlign: "left", fontSize: 12 }}>{prod.name}</td>
+                  <td style={{ ...S.td, color: P.muted }}>{todayQty > 0 ? todayQty : "—"}</td>
+                  <td style={S.td}>
+                    <Stepper value={stock50Items[i]?.stock50 || 0} onChange={v => updateStock50(i, v)} color={P.red} />
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      <div style={{ marginTop: 18, display: "flex", justifyContent: "flex-end" }}>
+        <button onClick={goToSalesFromStock50} style={S.btn()}>Next: Sales Entry →</button>
+      </div>
+    </div>
+  );
+
+  const dayOff = items.length > 0 && items[0].dayOff;
+  const cols = isToyota
+    ? dayOff
+      ? ["Item","Price","Stock","Full Price","5% off","Today 50%","50% Stock","50% Sales","L/O","Waste","Total"]
+      : ["Item","Price","Stock","Full Price","5% off","50% Stock","50% Sales","L/O","Waste","Total"]
+    : ["Item","Price","Stock","Full Price","L/O","Total"];
+  const colColor = (h) => h==="L/O"?P.muted:h==="Waste"?P.red:h==="50% Sales"?P.red:h==="5% off"?P.purple:h==="Today 50%"?"#fb923c":h==="Total"?P.green:P.muted;
+
+  return (
+    <div style={S.sec}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
+        {isToyota
+          ? <button onClick={() => setStep("stock50")} style={{ ...S.btn("ghost"), padding: "6px 12px", fontSize: 13 }}>← 50% Stock</button>
+          : <button onClick={() => setStep("selectList")} style={{ ...S.btn("ghost"), padding: "6px 12px", fontSize: 13 }}>← Back</button>}
+        <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>Sales Entry</h2>
+        <span style={S.pill(storeColor)}>{STORES[role]}</span>
+        {isToyota && <span style={S.pill(P.green)}>STEP 2</span>}
+      </div>
+      <div style={S.tw}>
+        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          <thead><tr>{cols.map((h, i) => <th key={i} style={{ ...S.th, textAlign: i===0?"left":"center", color: colColor(h), ...(i===0?{position:"sticky",left:0,zIndex:2,background:P.surface}:{}) }}>{h}</th>)}</tr></thead>
+          <tbody>
+            {items.map((item, i) => {
+              const lo = calcLO(item), waste = calcWaste(item), total = calcItemTotal(item, isToyota);
+              return (
+                <tr key={i}>
+                  <td style={{ ...S.td, textAlign: "left", fontWeight: 500, fontSize: 12, position: "sticky", left: 0, background: P.card, zIndex: 1, minWidth: 90 }}>{item.name}</td>
+                  <td style={{ ...S.td, color: P.muted, fontSize: 12 }}>{currency(item.price)}</td>
+                  <td style={{ ...S.td, color: P.muted }}>{item.qty}{isToyota && item.stock50 > 0 && <span style={{ color: P.red, fontSize: 10 }}> +{item.stock50}</span>}</td>
+                  <td style={S.td}><Stepper value={item.soldFull||0} onChange={v=>updateItem(i,"soldFull",v)} color={P.accent}/></td>
+                  {isToyota&&<td style={S.td}><Stepper value={item.sold5||0} onChange={v=>updateItem(i,"sold5",v)} color={P.purple}/></td>}
+                  {isToyota&&dayOff&&<td style={S.td}><Stepper value={item.soldToday50||0} onChange={v=>updateSoldToday50(i,v)} color={P.orange}/></td>}
+                  {isToyota&&<td style={{...S.td,color:P.red}}>{item.stock50||0}</td>}
+                  {isToyota&&<td style={S.td}><Stepper value={item.sold50||0} onChange={v=>updateItem(i,"sold50",Math.min(item.stock50||0,v))} color={P.red}/></td>}
+                  <td style={{...S.td,color:lo>0?P.orange:P.muted,fontWeight:600}}>{lo}</td>
+                  {isToyota&&<td style={{...S.td,color:waste>0?P.red:P.muted,fontWeight:600}}>{waste}</td>}
+                  <td style={{...S.td,color:P.green,fontWeight:700}}>{currency(total)}</td>
+                </tr>
+              );
+            })}
+            <tr style={{ background: P.surface, fontWeight: 700 }}>
+              <td colSpan={isToyota?(dayOff?10:9):5} style={{...S.td,textAlign:"right",color:P.muted}}>Total Sales</td>
+              <td style={{...S.td,color:P.green}}>{currency(totals.totalSales)}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      {/* Recorder name */}
+      <div style={{ ...S.card, margin: "14px 0 10px" }}>
+        <div style={{ fontWeight: 700, marginBottom: 10, color: P.accent }}>👤 Recorder</div>
+        <select value={recorderName} onChange={e => setRecorderName(e.target.value)} style={S.inp}>
+          <option value="">-- Select your name --</option>
+          {staffList.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+        </select>
+      </div>
+
+      <div style={{ ...S.card, margin: "14px 0" }}>
+        <div style={{ fontWeight: 700, marginBottom: 10, color: P.accent }}>💰 Cash Summary</div>
+        <div style={S.row}>
+          <div style={S.col}><label style={S.lbl}>Starting Cash</label><input type="number" value={startingCash} onChange={e=>{setHasUserEdited(true);setStartingCash(e.target.value)}} style={S.inp} placeholder="0"/></div>
+          <div style={S.col}><label style={S.lbl}>Expenses</label><input type="number" value={expenses} onChange={e=>{setHasUserEdited(true);setExpenses(e.target.value)}} style={S.inp} placeholder="0"/></div>
+        </div>
+        <div style={S.sb}>
+          <div style={{display:"flex",justifyContent:"space-between",padding:"4px 0",fontSize:13}}><span style={{color:P.muted}}>Total Sales</span><span style={{color:P.green,fontWeight:600}}>{currency(totals.totalSales)}</span></div>
+          <div style={{display:"flex",justifyContent:"space-between",padding:"4px 0",fontSize:13}}><span style={{color:P.muted}}>Online Payment</span><span style={{color:P.blue}}>{currency(totals.onlineTotal)}</span></div>
+          <div style={{display:"flex",justifyContent:"space-between",padding:"4px 0",fontSize:13}}><span style={{color:P.muted}}>Expenses</span><span style={{color:P.red}}>−{currency(expenses)}</span></div>
+          <div style={{borderTop:`1px solid ${P.border}`,marginTop:6,paddingTop:6,display:"flex",justifyContent:"space-between",fontSize:15,fontWeight:700}}><span>Ending Cash</span><span style={{color:P.accent}}>{currency(totals.endingCash)}</span></div>
+        </div>
+      </div>
+      <div style={{ ...S.card, marginBottom: 18 }}>
+        <div style={{ fontWeight: 700, marginBottom: 10, color: P.accent }}>📱 Online Payments (Gcash / BPI)</div>
+        {payments.map((p, i) => (
+          <div key={i} style={{ ...S.row, marginBottom: 8 }}>
+            <div style={{flex:2}}><input placeholder="Ref No." value={p.ref} onChange={e=>updPayment(i,"ref",e.target.value)} style={S.inp}/></div>
+            <div style={{flex:1}}><input placeholder="Amount" type="number" value={p.amount} onChange={e=>updPayment(i,"amount",e.target.value)} style={S.inp}/></div>
+            {payments.length>1&&<button onClick={()=>removePayment(i)} style={{...S.btn("danger"),padding:"9px 12px"}}>✕</button>}
+          </div>
+        ))}
+        <button onClick={addPayment} style={{...S.btn("ghost"),fontSize:13}}>+ Add Payment</button>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {/* Save status */}
+        <div style={{ textAlign: "right", fontSize: 11, minHeight: 16 }}>
+          {saveError && <div style={{ color: P.red, marginBottom: 6 }}>{saveError}</div>}
+          {!saveError && draftId && <span style={{ color: P.muted }}>{`💡 Ready to submit · Total: ${currency(totals.totalSales)}`}</span>}
+          {!saveError && !draftId && <span style={{ color: P.orange }}>⚠️ No draft — go back and select a list</span>}
+        </div>
+        {/* Submit to Admin button (shown when draft exists) */}
+        {draftId && (
+          <div style={{ ...S.card, borderColor: P.orange + "44" }}>
+            <div style={{ fontWeight: 700, marginBottom: 6, color: P.orange, fontSize: 13 }}>📨 Done for the day?</div>
+            <div style={{ fontSize: 12, color: P.muted, marginBottom: 10 }}>Save your final record and submit to admin for review.</div>
+            <div style={{ display: "flex", gap: 10 }}>
+              <button onClick={handleSave} disabled={saving} style={{ ...S.btn("ghost"), flex: 1, opacity: saving ? 0.6 : 1 }}>
+                {saving ? "Saving..." : "💾 Save Only"}
+              </button>
+              <button onClick={handleSubmit} disabled={saving} style={{ ...S.btn(), flex: 2, opacity: saving ? 0.6 : 1 }}>
+                {saving ? "Saving..." : "Submit to Admin →"}
+              </button>
+            </div>
+          </div>
+        )}
+        {!draftId && (
+          <div style={{ display: "flex", justifyContent: "flex-end" }}>
+            <button onClick={handleSave} disabled={saving} style={{ ...S.btn(), opacity: saving ? 0.6 : 1 }}>
+              {saving ? "Saving..." : "Save Record ✓"}
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Admin View ────────────────────────────────────────────────────────────────
+function AdminView({ onRecordChange }) {
+  const phNowInit = new Date(Date.now() + 8 * 60 * 60 * 1000);
+  const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const [tab, setTab] = useState("inbox");
+  const [viewYear, setViewYear] = useState(phNowInit.getUTCFullYear());
+  const [viewMonth, setViewMonth] = useState(phNowInit.getUTCMonth()+1);
+  const [filterStore, setFilterStore] = useState("all");
+  const [filterStatus, setFilterStatus] = useState("all");
+  const [confirmDeleteId, setConfirmDeleteId] = useState(null);
+  const [submitted, setSubmitted] = useState([]);
+  const [records, setRecords] = useState([]);
+  const [loading, setLoading] = useState(false);
+  // Staff management
+  const [allStaff, setAllStaff] = useState([]);
+  const [newStaffName, setNewStaffName] = useState("");
+  const [newStaffStore, setNewStaffStore] = useState("toyota");
+  const [confirmDeleteStaffId, setConfirmDeleteStaffId] = useState(null);
+
+  const loadStaff = useCallback(async () => {
+    const [t, a] = await Promise.all([api.getStaff("toyota"), api.getStaff("aws")]);
+    setAllStaff([...t, ...a]);
+  }, []);
+
+  useEffect(() => { loadStaff(); }, [loadStaff]);
+
+  const handleAddStaff = async () => {
+    if (!newStaffName.trim()) return;
+    await api.addStaff(newStaffName.trim(), newStaffStore);
+    setNewStaffName("");
+    loadStaff();
+  };
+
+  const handleDeleteStaff = async (id) => {
+    await api.deleteStaff(id);
+    setConfirmDeleteStaffId(null);
+    loadStaff();
+  };
+
+  const loadInbox = useCallback(async () => {
+    setLoading(true);
+    const data = await api.getSubmitted();
+    setSubmitted(data);
+    setLoading(false);
+  }, []);
+
+  const fetchRecords = async (y, m) => {
+    setLoading(true);
+    // Get last day of month correctly
+    const lastDay = new Date(y, m, 0).getDate();
+    const start = `${y}-${String(m).padStart(2,"0")}-01`;
+    const end = `${y}-${String(m).padStart(2,"0")}-${String(lastDay).padStart(2,"0")}`;
+    console.log("Fetching records for", start, "to", end);
+    const { data, error } = await supabase.from("sales_records")
+      .select("*")
+      .gte("date", start)
+      .lte("date", end)
+      .order("date");
+    if (error) console.error("fetchRecords error:", error);
+    console.log("Got records:", data?.length);
+    setRecords((data || []).map(mapRecord));
+    setLoading(false);
+  };
+
+  useEffect(() => { loadInbox(); }, [loadInbox]);
+  useEffect(() => {
+    fetchRecords(viewYear, viewMonth);
+  }, [viewYear, viewMonth]);
+
+  const filteredRecords = records.filter(r =>
+    (filterStore === "all" || r.store === filterStore) &&
+    (filterStatus === "all" || r.status === filterStatus)
+  ).sort((a, b) => a.date.localeCompare(b.date));
+
+  const grandTotal = filteredRecords.reduce((s, r) => s + calcTotals(r).totalSales, 0);
+
+  const confirmRecord = async (id) => {
+    const phNow = new Date(Date.now() + 8 * 60 * 60 * 1000);
+    const phIso = phNow.toISOString().replace("Z", "+08:00");
+    await api.updateRecord(id, { status: "confirmed", confirmedAt: phIso });
+    onRecordChange();
+    loadInbox();
+  };
+
+  const deleteRecord = async (id) => {
+    await api.deleteRecord(id);
+    setConfirmDeleteId(null);
+    onRecordChange();
+    if (tab === "inbox") loadInbox(); else loadRecords();
+  };
+
+  const exportCSV = () => {
+    const rows = [["Date","Store","Item","Stock","Full Price Sales","5% Sales","50% Stock","50% Sales","L/O","Waste","Total","Status"]];
+    filteredRecords.forEach(r => {
+      const isToyota = r.store === "toyota";
+      r.items.forEach(item => rows.push([r.date,STORES[r.store],item.name,item.qty,item.soldFull,isToyota?item.sold5:"",isToyota?item.stock50:"",isToyota?item.sold50:"",calcLO(item),isToyota?calcWaste(item):"",calcItemTotal(item,isToyota).toFixed(2),r.status]));
+      rows.push([r.date,STORES[r.store],"--- TOTAL ---","","","","","","","",calcTotals(r).totalSales.toFixed(2),r.status]);
+      rows.push([]);
+    });
+    const csv = rows.map(r=>r.join(",")).join("\n");
+    const dataUri = "data:text/csv;charset=utf-8," + encodeURIComponent(csv);
+    const a = document.createElement("a");
+    a.href = dataUri;
+    a.download = `sales_${viewYear}_${String(viewMonth).padStart(2,"0")}.csv`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  };
+
+  const RecordCard = ({ r, showConfirm }) => {
+    const isToyota = r.store === "toyota";
+    const t = calcTotals(r);
+    return (
+      <div style={{ ...S.card, marginBottom: 12, borderColor: showConfirm ? P.orange+"55" : P.border }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6, flexWrap: "wrap", gap: 6 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            <span style={{ fontWeight: 700 }}>{fmtDate(r.date)}</span>
+            <span style={S.pill(r.store==="toyota"?P.toyota:P.aws)}>{STORES[r.store]}</span>
+            <StatusBadge status={r.status}/>
+          </div>
+          <span style={{ color: P.green, fontWeight: 700 }}>{currency(t.totalSales)}</span>
+        </div>
+        {r.recorderName&&<div style={{fontSize:12,color:P.muted,marginBottom:4}}>👤 {r.recorderName}</div>}
+        {r.submittedAt&&<div style={{fontSize:11,color:P.muted,marginBottom:6}}>Submitted: {fmtTime(r.submittedAt)}</div>}
+        {r.confirmedAt&&<div style={{fontSize:11,color:P.green,marginBottom:6}}>✓ Confirmed {fmtTime(r.confirmedAt)}</div>}
+        <div style={S.tw}>
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead><tr>
+              <th style={{...S.th,textAlign:"left"}}>Item</th>
+              <th style={S.th}>Stock</th><th style={S.th}>Full</th>
+              {isToyota&&<th style={{...S.th,color:P.purple}}>5%</th>}
+              {isToyota&&<th style={{...S.th,color:P.red}}>50%Stk</th>}
+              {isToyota&&<th style={{...S.th,color:P.red}}>50%Sls</th>}
+              <th style={{...S.th,color:P.orange}}>L/O</th>
+              {isToyota&&<th style={{...S.th,color:P.red}}>Waste</th>}
+              <th style={{...S.th,color:P.green}}>Total</th>
+            </tr></thead>
+            <tbody>
+              {r.items.map((item,i)=>{
+                const lo=calcLO(item),waste=calcWaste(item),total=calcItemTotal(item,isToyota);
+                return (
+                  <tr key={i}>
+                    <td style={{...S.td,textAlign:"left",fontSize:11}}>{item.name}</td>
+                    <td style={S.td}>{item.qty}</td>
+                    <td style={S.td}>{item.soldFull}</td>
+                    {isToyota&&<td style={{...S.td,color:P.purple}}>{item.sold5||"-"}</td>}
+                    {isToyota&&<td style={{...S.td,color:P.red}}>{item.stock50||"-"}</td>}
+                    {isToyota&&<td style={{...S.td,color:P.red}}>{item.sold50||"-"}</td>}
+                    <td style={{...S.td,color:lo>0?P.orange:P.muted,fontWeight:600}}>{lo}</td>
+                    {isToyota&&<td style={{...S.td,color:waste>0?P.red:P.muted,fontWeight:600}}>{waste}</td>}
+                    <td style={{...S.td,color:P.green,fontWeight:700}}>{currency(total)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 10, flexWrap: "wrap", gap: 8 }}>
+          <div style={{ fontSize: 12, color: P.muted }}>Start: {currency(r.startingCash)} | End: <span style={{color: P.accent, fontWeight: 600}}>{currency(t.endingCash)}</span> | Online: {currency(t.onlineTotal)}</div>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            {showConfirm && <button onClick={()=>confirmRecord(r.id)} style={{...S.btn("success"),padding:"7px 16px",fontSize:13}}>✓ Confirm</button>}
+            {confirmDeleteId===r.id
+              ? <>
+                  <span style={{fontSize:12,color:P.red}}>Delete?</span>
+                  <button onClick={()=>deleteRecord(r.id)} style={{...S.btn("danger"),padding:"5px 10px",fontSize:12}}>Yes</button>
+                  <button onClick={()=>setConfirmDeleteId(null)} style={{...S.btn("ghost"),padding:"5px 10px",fontSize:12}}>No</button>
+                </>
+              : <button onClick={()=>setConfirmDeleteId(r.id)} style={{background:"none",border:`1px solid ${P.red}44`,borderRadius:7,color:P.red,padding:"5px 10px",fontSize:11,cursor:"pointer"}}>🗑</button>
+            }
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const tabs = [
+    { id: "inbox", label: "📨 Inbox", badge: submitted.length },
+    { id: "records", label: "📊 Records" },
+    { id: "staff", label: "👥 Staff" },
+  ];
+
+  return (
+    <div style={S.sec}>
+      <h2 style={{ margin: "0 0 14px", fontSize: 18, fontWeight: 700 }}>Admin Dashboard</h2>
+      <div style={{ display: "flex", gap: 8, marginBottom: 18, flexWrap: "wrap" }}>
+        {tabs.map(t => (
+          <button key={t.id} onClick={() => { setTab(t.id); setConfirmDeleteId(null); }} style={{ ...S.btn(tab===t.id?"primary":"ghost"), padding: "8px 14px", fontSize: 13, position: "relative" }}>
+            {t.label}
+            {t.badge>0&&<span style={{position:"absolute",top:-6,right:-6,background:P.red,color:"#fff",borderRadius:"50%",width:18,height:18,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:700}}>{t.badge}</span>}
+          </button>
+        ))}
+      </div>
+
+      {tab==="inbox"&&(
+        loading ? <Spinner /> : submitted.length===0
+          ? <div style={{...S.card,textAlign:"center",padding:40,color:P.muted}}><div style={{fontSize:32,marginBottom:8}}>📭</div>No pending submissions.</div>
+          : submitted.map(r=><RecordCard key={r.id} r={r} showConfirm={true}/>)
+      )}
+
+      {tab==="records"&&(
+        <>
+          <div style={{...S.row,marginBottom:14}}>
+            <div style={S.col}><label style={S.lbl}>Year</label><select value={viewYear} onChange={e=>setViewYear(Number(e.target.value))} style={S.inp}>{[2024,2025,2026].map(y=><option key={y}>{y}</option>)}</select></div>
+            <div style={S.col}><label style={S.lbl}>Month</label><select value={viewMonth} onChange={e=>setViewMonth(Number(e.target.value))} style={S.inp}>{months.map((m,i)=><option key={i} value={i+1}>{m}</option>)}</select></div>
+            <div style={S.col}><label style={S.lbl}>Store</label><select value={filterStore} onChange={e=>setFilterStore(e.target.value)} style={S.inp}><option value="all">All</option><option value="toyota">Toyota</option><option value="aws">AWS</option></select></div>
+            <div style={S.col}><label style={S.lbl}>Status</label><select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} style={S.inp}><option value="all">All</option><option value="draft">Draft</option><option value="submitted">Submitted</option><option value="confirmed">Confirmed</option></select></div>
+          </div>
+          <button onClick={() => fetchRecords(viewYear, viewMonth)} style={{...S.btn("ghost"),marginBottom:14,fontSize:13}}>🔄 Refresh</button>
+          <div style={{display:"flex",gap:10,marginBottom:14,flexWrap:"wrap"}}>
+            <div style={{...S.card,flex:1,minWidth:90,textAlign:"center"}}><div style={{color:P.muted,fontSize:11,textTransform:"uppercase"}}>Days</div><div style={{fontSize:22,fontWeight:700,color:P.accent}}>{filteredRecords.length}</div></div>
+            <div style={{...S.card,flex:1,minWidth:90,textAlign:"center"}}><div style={{color:P.muted,fontSize:11,textTransform:"uppercase"}}>Total</div><div style={{fontSize:22,fontWeight:700,color:P.green}}>{currency(grandTotal)}</div></div>
+            <div style={{...S.card,flex:1,minWidth:90,textAlign:"center"}}><div style={{color:P.muted,fontSize:11,textTransform:"uppercase"}}>Avg/Day</div><div style={{fontSize:22,fontWeight:700,color:P.blue}}>{currency(filteredRecords.length?grandTotal/filteredRecords.length:0)}</div></div>
+          </div>
+          {loading ? <Spinner /> : filteredRecords.length===0
+            ? <div style={{...S.card,textAlign:"center",padding:40,color:P.muted}}>No records for {months[viewMonth-1]} {viewYear}</div>
+            : filteredRecords.map(r=><RecordCard key={r.id} r={r} showConfirm={false}/>)
+          }
+          {filteredRecords.length>0&&<div style={{marginTop:14,display:"flex",justifyContent:"flex-end"}}><button onClick={exportCSV} style={S.btn()}>⬇ Export CSV ({months[viewMonth-1]} {viewYear})</button></div>}
+        </>
+      )}
+      {tab === "staff" && (
+        <div>
+          <p style={{ color: P.muted, fontSize: 13, marginTop: 0 }}>Manage staff for each store. Changes apply to the recorder dropdown immediately.</p>
+          <div style={{ ...S.card, marginBottom: 16 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10, color: P.accent }}>+ Add New Staff</div>
+            <div style={S.row}>
+              <div style={{ flex: 2 }}><input placeholder="Name" value={newStaffName} onChange={e => setNewStaffName(e.target.value)} style={S.inp} /></div>
+              <div style={{ flex: 1 }}>
+                <select value={newStaffStore} onChange={e => setNewStaffStore(e.target.value)} style={S.inp}>
+                  <option value="toyota">Toyota</option>
+                  <option value="aws">AWS</option>
+                </select>
+              </div>
+              <button onClick={handleAddStaff} style={S.btn()}>Add</button>
+            </div>
+          </div>
+          {["toyota","aws"].map(store => (
+            <div key={store} style={{ marginBottom: 20 }}>
+              <div style={{ fontWeight: 700, marginBottom: 8, color: store === "toyota" ? P.toyota : P.aws, fontSize: 14 }}>
+                {STORES[store]}
+              </div>
+              {allStaff.filter(s => s.store === store).map(s => (
+                <div key={s.id} style={{ ...S.card, marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span style={{ fontSize: 14, fontWeight: 500 }}>{s.name}</span>
+                  {confirmDeleteStaffId === s.id
+                    ? <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                        <span style={{ fontSize: 12, color: P.red }}>Remove?</span>
+                        <button onClick={() => handleDeleteStaff(s.id)} style={{ ...S.btn("danger"), padding: "5px 10px", fontSize: 12 }}>Yes</button>
+                        <button onClick={() => setConfirmDeleteStaffId(null)} style={{ ...S.btn("ghost"), padding: "5px 10px", fontSize: 12 }}>No</button>
+                      </div>
+                    : <button onClick={() => setConfirmDeleteStaffId(s.id)} style={{ background: "none", border: `1px solid ${P.red}44`, borderRadius: 7, color: P.red, padding: "5px 10px", fontSize: 11, cursor: "pointer" }}>🗑 Remove</button>
+                  }
+                </div>
+              ))}
+              {allStaff.filter(s => s.store === store).length === 0 && (
+                <div style={{ color: P.muted, fontSize: 13, padding: "10px 0" }}>No staff added yet.</div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── App Shell ─────────────────────────────────────────────────────────────────
+export default function App() {
+  const [role, setRole] = useState(null);
+  const [pendingCount, setPendingCount] = useState(0);
+
+  const refreshPending = useCallback(async () => {
+    const count = await api.getPendingCount();
+    setPendingCount(count);
+  }, []);
+
+  useEffect(() => { refreshPending(); }, [refreshPending]);
+
+  const roleConfig = {
+    staff:  { label: "Main Store",      color: P.green,  icon: "🏠" },
+    toyota: { label: "Toyota Sta Rosa", color: P.toyota, icon: "🏪" },
+    aws:    { label: "AWS",             color: P.aws,    icon: "🏪" },
+    admin:  { label: "Admin",           color: P.accent, icon: "👩‍💼" },
+  };
+
+  if (!role) return <PinScreen onLogin={setRole} pendingCount={pendingCount} />;
+  const cfg = roleConfig[role];
+
+  return (
+    <div style={S.app}>
+      <div style={S.hdr}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ fontSize: 20 }}>{cfg.icon}</span>
+          <span style={{ fontSize: 17, fontWeight: 700, color: P.accent }}>🍞 Bread Sales</span>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          {role === "admin" && pendingCount > 0 && (
+            <span style={{ background: P.red, color: "#fff", borderRadius: 12, padding: "2px 8px", fontSize: 12, fontWeight: 700 }}>{pendingCount} pending</span>
+          )}
+          <span style={S.pill(cfg.color)}>{cfg.label}</span>
+          <button onClick={() => setRole(null)} style={{ ...S.btn("ghost"), padding: "6px 10px", fontSize: 12 }}>Logout</button>
+        </div>
+      </div>
+      {role === "staff"  && <StaffView />}
+      {(role === "toyota" || role === "aws") && <SellerView role={role} onRecordChange={refreshPending} />}
+      {role === "admin"  && <AdminView onRecordChange={refreshPending} />}
+    </div>
+  );
+}
